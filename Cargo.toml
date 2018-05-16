@@ -1,0 +1,11 @@
+[package]
+authors = ["Michał Krasnoborski <michal.krasnoborski@codilime.com>"]
+name = "shelly"
+version = "0.1.0"
+
+[dependencies]
+failure = "0.1.1"
+lazy_static = "1.0.0"
+regex = "1.0.0"
+walkdir = "2.1.4"
+yansi = "0.4.0"
