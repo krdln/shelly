@@ -3,6 +3,14 @@ authors = ["Michał Krasnoborski <michal.krasnoborski@codilime.com>"]
 name = "shelly"
 version = "0.1.0"
 
+[lib]
+name = "shelly"
+path = "src/lib.rs"
+
+[[bin]]
+name = "shellyctl"
+path = "src/main.rs"
+
 [dependencies]
 failure = "0.1.1"
 lazy_static = "1.0.0"
