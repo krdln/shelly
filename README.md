@@ -1,10 +1,12 @@
 # Shelly — very dumb PowerShell script analyzer
 
-A tool to quickly
+[![Build Status](https://travis-ci.com/krdln/shelly.svg?branch=master)](https://travis-ci.com/krdln/shelly)
+
+A tool to qiuckly detect invalid or missing imports in powershell scripts.
 
 What it does:
 * Validate dot imports (eg. `. $PSScriptRoot/Foo.ps1`)
-* Verifiy which functions/commandlets are in scope
+* Verify which functions/commandlets are in scope
 * Warn on "indirect imports"
 * Know about some builtins
 
