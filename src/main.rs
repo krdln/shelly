@@ -323,6 +323,10 @@ fn parse(path: &Path) -> Result<Parsed, Error> {
         static ref USAGE: Regex = Regex::new(
             r"(?ix) ^ \s* (?: \$\S+ \s*=\s*)? ([[:alpha:]]+-[a-z0-9]+) (?: \s+ .*)? $"
         ).unwrap();
+
+        static ref TESTCASE: Regex = Regex::new(
+            r#"(?ix) ^ \s* It \s+ " ([^"]*) " "#
+        ).unwrap();
     }
 
     let file = fs::read_to_string(path)?;
@@ -333,6 +337,8 @@ fn parse(path: &Path) -> Result<Parsed, Error> {
     let mut definitions = Vec::new();
     let mut usages = Vec::new();
     let mut imports = Vec::new();
+
+    let uses_pester_logger = file.contains("Initialize-PesterLogger");
 
     for (line, line_no) in file.lines().zip(1..) {
 
@@ -376,6 +382,20 @@ fn parse(path: &Path) -> Result<Parsed, Error> {
                 line_no,
                 name: captures[1].to_owned(),
             } );
+        }
+
+        if let Some(captures) = TESTCASE.captures(line) {
+            let invalid_chars: &[char] = &['"', '>', '<', '|', ':', '*', '?', '\\', '/'];
+            if uses_pester_logger && captures[1].contains(invalid_chars) {
+                emit(
+                    Message::Warning,
+                    "Testname contains invalid characters",
+                    path,
+                    line_no,
+                    &line,
+                    Some(&format!("These characters are invalid in a file name: {:?}", invalid_chars)),
+                );
+            }
         }
     }
 
