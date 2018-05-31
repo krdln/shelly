@@ -1,7 +1,9 @@
-extern crate walkdir;
 extern crate regex;
-#[macro_use] extern crate failure;
-#[macro_use] extern crate lazy_static;
+extern crate walkdir;
+#[macro_use]
+extern crate failure;
+#[macro_use]
+extern crate lazy_static;
 
 use walkdir::WalkDir;
 
@@ -10,13 +12,21 @@ use failure::ResultExt;
 
 use regex::Regex;
 
-use std::fs;
-use std::path::{Path, PathBuf};
 use std::collections::BTreeMap as Map;
 use std::collections::BTreeSet as Set;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 pub trait Emitter {
-    fn emit(&mut self, kind: Message, message: String, file: PathBuf, line_no: u32, line: String, notes: Option<String>);
+    fn emit(
+        &mut self,
+        kind: Message,
+        message: String,
+        file: PathBuf,
+        line_no: u32,
+        line: String,
+        notes: Option<String>,
+    );
 }
 
 pub struct EmittedItem {
@@ -25,30 +35,36 @@ pub struct EmittedItem {
     pub file: PathBuf,
     pub line_no: u32,
     pub line: String,
-    pub notes: Option<String>
+    pub notes: Option<String>,
 }
 
 pub struct VecEmitter {
-    pub emitted_items: Vec<EmittedItem>
+    pub emitted_items: Vec<EmittedItem>,
 }
 
 impl Emitter for VecEmitter {
-    fn emit(&mut self, kind: Message, message: String, file: PathBuf, line_no: u32, line: String, notes: Option<String>) {
+    fn emit(
+        &mut self,
+        kind: Message,
+        message: String,
+        file: PathBuf,
+        line_no: u32,
+        line: String,
+        notes: Option<String>,
+    ) {
         let to_emit: EmittedItem = EmittedItem {
             kind: kind,
             message: message,
             file: file,
             line_no: line_no,
             line: line,
-            notes: notes
+            notes: notes,
         };
         self.emitted_items.push(to_emit)
     }
 }
 
-
 pub fn run(emitter: &mut Emitter) -> Result<(), Error> {
-
     if !Path::new(".git").exists() {
         eprintln!("warning: not a root of a repository");
     }
@@ -57,9 +73,15 @@ pub fn run(emitter: &mut Emitter) -> Result<(), Error> {
 
     for entry in WalkDir::new(".") {
         let entry = entry.context("traversing")?;
-        if entry.path().to_str().unwrap_or("").contains("_Old_Tests") { continue }
-        if !entry.file_type().is_file() { continue }
-        if entry.path().extension().and_then(|ext| ext.to_str()) != Some("ps1") { continue }
+        if entry.path().to_str().unwrap_or("").contains("_Old_Tests") {
+            continue;
+        }
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        if entry.path().extension().and_then(|ext| ext.to_str()) != Some("ps1") {
+            continue;
+        }
 
         let mut import_error = false;
         let mut parsed = parse(entry.path(), emitter)?;
@@ -72,7 +94,10 @@ pub fn run(emitter: &mut Emitter) -> Result<(), Error> {
                     PathBuf::from(entry.path()),
                     import.line_no,
                     import.line.to_string(),
-                    Some(format!("File not found: {}", import.resolved_path.display()))
+                    Some(format!(
+                        "File not found: {}",
+                        import.resolved_path.display()
+                    )),
                 );
             }
         }
@@ -119,8 +144,7 @@ enum Found {
 impl<'a> Scope<'a> {
     fn search(&self, name: &str) -> Option<Found> {
         if self.all.contains(name) {
-            if self.defined.contains(name)
-            || self.directly_imported.contains(name) {
+            if self.defined.contains(name) || self.directly_imported.contains(name) {
                 Some(Found::Direct)
             } else {
                 Some(Found::Indirect)
@@ -143,13 +167,11 @@ enum ScopeWip<'a> {
 }
 
 fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) -> Result<(), Error> {
-
     lazy_static! {
-        static ref BUILTINS: Set<&'static str> =
-            include_str!("builtins.txt")
-                .split_whitespace()
-                .chain( include_str!("extras.txt").split_whitespace() )
-                .collect();
+        static ref BUILTINS: Set<&'static str> = include_str!("builtins.txt")
+            .split_whitespace()
+            .chain(include_str!("extras.txt").split_whitespace())
+            .collect();
     }
 
     let mut scopes = Map::new();
@@ -162,9 +184,15 @@ fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) -> Result<(), Er
         let mut already_analyzed = Set::new();
 
         for usage in &parsed.usages {
-            if BUILTINS.contains(usage.name.as_str()) { continue }
-            if is_allowed(&usage.line, &usage.name) { continue }
-            if already_analyzed.contains(usage.name.as_str()) { continue }
+            if BUILTINS.contains(usage.name.as_str()) {
+                continue;
+            }
+            if is_allowed(&usage.line, &usage.name) {
+                continue;
+            }
+            if already_analyzed.contains(usage.name.as_str()) {
+                continue;
+            }
 
             already_analyzed.insert(usage.name.as_str());
 
@@ -175,15 +203,15 @@ fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) -> Result<(), Er
                     PathBuf::from(parsed.original_path.clone()),
                     usage.line_no,
                     usage.line.to_string(),
-                    None
+                    None,
                 ),
-                Some(Found::Indirect) => emitter.emit (
+                Some(Found::Indirect) => emitter.emit(
                     Message::Warning,
                     format!("Indirectly imported: {}", usage.name),
                     PathBuf::from(parsed.original_path.clone()),
                     usage.line_no,
                     usage.line.to_string(),
-                    None
+                    None,
                 ),
                 _ => (),
             }
@@ -207,7 +235,11 @@ fn is_allowed(line: &str, what: &str) -> bool {
     }
 }
 
-fn get_scope<'a>(file: &'a Path, files: &'a Map<PathBuf, Parsed>, scopes: &mut Map<&'a Path, ScopeWip<'a>>) -> Result<Scope<'a>, Error> {
+fn get_scope<'a>(
+    file: &'a Path,
+    files: &'a Map<PathBuf, Parsed>,
+    scopes: &mut Map<&'a Path, ScopeWip<'a>>,
+) -> Result<Scope<'a>, Error> {
     match scopes.get(file) {
         Some(ScopeWip::Current) => bail!("Recursive import of {}", file.display()),
         Some(ScopeWip::Resolved(scope)) => return Ok(scope.clone()),
@@ -215,12 +247,13 @@ fn get_scope<'a>(file: &'a Path, files: &'a Map<PathBuf, Parsed>, scopes: &mut M
     };
     scopes.insert(file, ScopeWip::Current);
 
-    let parsed_file = files.get(file)
-        .ok_or_else(|| format_err!(
+    let parsed_file = files.get(file).ok_or_else(|| {
+        format_err!(
             "List of elements in scope of file {} was requested, \
              but not available due to previous import error",
             file.display()
-        ))?;
+        )
+    })?;
 
     let mut scope = Scope::default();
 
@@ -329,47 +362,50 @@ fn parse(path: &Path, emitter: &mut Emitter) -> Result<Parsed, Error> {
     let uses_pester_logger = file.contains("Initialize-PesterLogger");
 
     for (line, line_no) in file.lines().zip(1..) {
-
         if let Some(captures) = IMPORT.captures(line) {
             let importee = &captures[1];
-            let resolved_path =
-                if let Some(captures) = IMPORT_RELATIVE.captures(importee) {
-                    let relative = captures[1].replace(r"\", "/");
-                    let relative = relative.trim_matches('/');
-                    path.parent().unwrap().join(relative)
-
-                } else if IMPORT_HERESUT.is_match(importee) {
-                    let pathstr = path.to_str().unwrap();
-                    pathstr.replace(".Tests.", ".").into()
-
-                } else {
-                    emitter.emit(
-                        Message::Warning,
-                        "Unrecognized import statement".to_string(),
-                        PathBuf::from(path),
-                        line_no,
-                        line.to_string(),
-                        Some("Note: Recognized imports are `$PSScriptRoot\\..` or `$here\\$sut`".to_string())
-                    );
-                    continue;
-                };
-            imports.push(Import { line: line.to_owned(), resolved_path, line_no })
+            let resolved_path = if let Some(captures) = IMPORT_RELATIVE.captures(importee) {
+                let relative = captures[1].replace(r"\", "/");
+                let relative = relative.trim_matches('/');
+                path.parent().unwrap().join(relative)
+            } else if IMPORT_HERESUT.is_match(importee) {
+                let pathstr = path.to_str().unwrap();
+                pathstr.replace(".Tests.", ".").into()
+            } else {
+                emitter.emit(
+                    Message::Warning,
+                    "Unrecognized import statement".to_string(),
+                    PathBuf::from(path),
+                    line_no,
+                    line.to_string(),
+                    Some(
+                        "Note: Recognized imports are `$PSScriptRoot\\..` or `$here\\$sut`"
+                            .to_string(),
+                    ),
+                );
+                continue;
+            };
+            imports.push(Import {
+                line: line.to_owned(),
+                resolved_path,
+                line_no,
+            })
         }
 
         if let Some(captures) = DEFINITION.captures(line) {
-            definitions.push( Definition {
+            definitions.push(Definition {
                 line: line.to_owned(),
                 line_no,
                 name: captures[1].to_owned(),
-            } );
+            });
         }
 
         if let Some(captures) = USAGE.captures(line) {
-            usages.push( Usage {
+            usages.push(Usage {
                 line: line.to_owned(),
                 line_no,
                 name: captures[1].to_owned(),
-            } );
+            });
         }
 
         if let Some(captures) = TESTCASE.captures(line) {
@@ -381,11 +417,19 @@ fn parse(path: &Path, emitter: &mut Emitter) -> Result<Parsed, Error> {
                     path.to_owned(),
                     line_no,
                     line.to_owned(),
-                    Some(format!("These characters are invalid in a file name: {:?}", invalid_chars)),
+                    Some(format!(
+                        "These characters are invalid in a file name: {:?}",
+                        invalid_chars
+                    )),
                 );
             }
         }
     }
 
-    Ok(Parsed { definitions, usages, imports, original_path: path.to_owned() })
+    Ok(Parsed {
+        definitions,
+        usages,
+        imports,
+        original_path: path.to_owned(),
+    })
 }
