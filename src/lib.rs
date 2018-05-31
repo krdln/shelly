@@ -15,6 +15,9 @@ use std::path::{Path, PathBuf};
 use std::collections::BTreeMap as Map;
 use std::collections::BTreeSet as Set;
 
+pub trait Emitter {
+    fn emit(&mut self, kind: Message, message: String, file: PathBuf, line_no: u32, line: String, notes: Option<String>);
+}
 
 pub struct EmittedItem {
     pub kind: Message,
@@ -25,11 +28,11 @@ pub struct EmittedItem {
     pub notes: Option<String>
 }
 
-pub struct Emitter {
+pub struct VecEmitter {
     pub emitted_items: Vec<EmittedItem>
 }
 
-impl Emitter {
+impl Emitter for VecEmitter {
     fn emit(&mut self, kind: Message, message: String, file: PathBuf, line_no: u32, line: String, notes: Option<String>) {
         let to_emit: EmittedItem = EmittedItem {
             kind: kind,
