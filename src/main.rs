@@ -4,13 +4,7 @@ use shelly::run;
 use shelly::Message;
 use shelly::Emitter;
 
-use std::path::{Path, PathBuf};
-
-
-#[macro_use] extern crate failure;
-use failure::Error;
-use failure::ResultExt;
-
+use std::path::{PathBuf};
 
 extern crate yansi;
 use yansi::{Paint, Color};
