@@ -68,7 +68,7 @@ impl Emitter for VecEmitter {
     }
 }
 
-pub fn run(emitter: &mut Emitter, root_path: &str) -> Result<(), Error> {
+pub fn run(root_path: &str, emitter: &mut Emitter) -> Result<(), Error> {
     if !Path::new(".git").exists() {
         eprintln!("warning: not a root of a repository");
     }

@@ -3,7 +3,7 @@ extern crate shelly;
 fn test_dir(dir: &str) -> Vec<shelly::EmittedItem> {
     let mut emitter = shelly::VecEmitter::new();
     let root_path = format!("tests/{}", dir);
-    shelly::run(&mut emitter, &root_path).expect("run failed");
+    shelly::run(&root_path, &mut emitter).expect("run failed");
     emitter.emitted_items
 }
 
