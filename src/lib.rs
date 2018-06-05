@@ -42,6 +42,10 @@ pub struct VecEmitter {
     pub emitted_items: Vec<EmittedItem>,
 }
 
+impl VecEmitter {
+    pub fn new() -> VecEmitter { VecEmitter { emitted_items: Vec::new() }}
+}
+
 impl Emitter for VecEmitter {
     fn emit(
         &mut self,
@@ -64,14 +68,14 @@ impl Emitter for VecEmitter {
     }
 }
 
-pub fn run(emitter: &mut Emitter) -> Result<(), Error> {
+pub fn run(emitter: &mut Emitter, root_path: &str) -> Result<(), Error> {
     if !Path::new(".git").exists() {
         eprintln!("warning: not a root of a repository");
     }
 
     let mut files = Map::new();
 
-    for entry in WalkDir::new(".") {
+    for entry in WalkDir::new(root_path) {
         let entry = entry.context("traversing")?;
         if entry.path().to_str().unwrap_or("").contains("_Old_Tests") {
             continue;

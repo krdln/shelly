@@ -27,7 +27,7 @@ fn run() -> Result<(), Error> {
         Paint::disable();
     }
 
-    shelly::run(&mut CliEmitter {})
+    shelly::run(&mut CliEmitter {}, ".")
 }
 
 struct CliEmitter {}
