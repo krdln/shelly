@@ -29,6 +29,7 @@ pub trait Emitter {
     );
 }
 
+#[derive(Default)]
 pub struct EmittedItem {
     pub kind: Message,
     pub message: String,
@@ -68,11 +69,11 @@ impl Emitter for VecEmitter {
     }
 }
 
-pub fn run(root_path: &str, emitter: &mut Emitter) -> Result<(), Error> {
-    if !Path::new(".git").exists() {
-        eprintln!("warning: not a root of a repository");
-    }
+pub fn run(root_path: impl AsRef<Path>, emitter: &mut Emitter) -> Result<(), Error> {
+    run_(root_path.as_ref(), emitter)
+}
 
+pub fn run_(root_path: &Path, emitter: &mut Emitter) -> Result<(), Error> {
     let mut files = Map::new();
 
     for entry in WalkDir::new(root_path) {
@@ -285,6 +286,10 @@ fn get_scope<'a>(
 pub enum Message {
     Error,
     Warning,
+}
+
+impl Default for Message {
+    fn default() -> Message { Message::Error }
 }
 
 /// A `.` import

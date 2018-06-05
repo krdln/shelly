@@ -1,6 +1,6 @@
 extern crate shelly;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 extern crate failure;
 use failure::Error;
@@ -25,6 +25,10 @@ fn main() {
 fn run() -> Result<(), Error> {
     if cfg!(windows) && !Paint::enable_windows_ascii() {
         Paint::disable();
+    }
+
+    if !Path::new(".git").exists() {
+        eprintln!("warning: not a root of a repository");
     }
 
     shelly::run(".", &mut CliEmitter {})
