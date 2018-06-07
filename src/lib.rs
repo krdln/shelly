@@ -5,17 +5,18 @@ extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 
+mod syntax;
+
 use walkdir::WalkDir;
 
 use failure::Error;
 use failure::ResultExt;
 
-use regex::Regex;
-
 use std::collections::BTreeMap as Map;
 use std::collections::BTreeSet as Set;
-use std::fs;
 use std::path::{Path, PathBuf};
+
+use syntax::Parsed;
 
 pub trait Emitter {
     fn emit(
@@ -89,7 +90,7 @@ pub fn run_(root_path: &Path, emitter: &mut Emitter) -> Result<(), Error> {
         }
 
         let mut import_error = false;
-        let mut parsed = parse(entry.path(), emitter)?;
+        let mut parsed = syntax::parse(entry.path(), emitter)?;
         for import in &parsed.imports {
             if !import.resolved_path.exists() {
                 import_error = true;
@@ -290,155 +291,4 @@ pub enum Message {
 
 impl Default for Message {
     fn default() -> Message { Message::Error }
-}
-
-/// A `.` import
-#[derive(Debug)]
-struct Import {
-    line: String,
-    line_no: u32,
-    resolved_path: PathBuf,
-}
-
-/// Function / commandlet definition
-#[derive(Debug)]
-struct Definition {
-    line: String,
-    line_no: u32,
-    name: String,
-}
-
-/// Function / commandlet call
-#[derive(Debug)]
-struct Usage {
-    line: String,
-    line_no: u32,
-    name: String,
-}
-
-/// Parsed source file
-#[derive(Debug)]
-struct Parsed {
-    imports: Vec<Import>,
-    definitions: Vec<Definition>,
-    usages: Vec<Usage>,
-
-    /// Original, non-resolved path, relative to PWD
-    original_path: PathBuf,
-}
-
-/// Reads and parses source file
-fn parse(path: &Path, emitter: &mut Emitter) -> Result<Parsed, Error> {
-    lazy_static! {
-        static ref IMPORT: Regex = Regex::new(
-            r"(?ix) ^ \s* \. \s+ (.*?) \s* (\#.*)? $"
-        ).unwrap();
-
-        static ref IMPORT_RELATIVE: Regex = Regex::new(
-            r"(?ix) ^ \$ PSScriptRoot (.*?) $"
-        ).unwrap();
-
-        static ref IMPORT_HERESUT: Regex = Regex::new(
-            r#"(?ix) ^ ["]? \$ here [/\\] \$ sut ["]? $"#
-        ).unwrap();
-
-        // Note: it captures also definitions of nested functions,
-        // so it's overly optimistic wrt. code correctness.
-        static ref DEFINITION: Regex = Regex::new(
-            r"(?ix) ^ \s* function \s+ ([a-z][a-z0-9-]*) .* $"
-        ).unwrap();
-
-        // For now, conservatively treat only [$x = ] Verb-Foo
-        // at the very beginning of line as usage.
-        static ref USAGE: Regex = Regex::new(
-            r"(?ix) ^ \s* (?: \$\S+ \s*=\s*)? ([[:alpha:]]+-[a-z0-9]+) (?: \s+ .*)? $"
-        ).unwrap();
-
-        static ref TESTCASE: Regex = Regex::new(
-            r#"(?ix) ^ \s* It \s+ " ([^"]*) " "#
-        ).unwrap();
-    }
-
-    let file = fs::read_to_string(path)?;
-
-    // Strip BOM
-    let file = file.trim_left_matches('\u{feff}');
-
-    let mut definitions = Vec::new();
-    let mut usages = Vec::new();
-    let mut imports = Vec::new();
-
-    let uses_pester_logger = file.contains("Initialize-PesterLogger");
-
-    for (line, line_no) in file.lines().zip(1..) {
-        if let Some(captures) = IMPORT.captures(line) {
-            let importee = &captures[1];
-            let resolved_path = if let Some(captures) = IMPORT_RELATIVE.captures(importee) {
-                let relative = captures[1].replace(r"\", "/");
-                let relative = relative.trim_matches('/');
-                path.parent().unwrap().join(relative)
-            } else if IMPORT_HERESUT.is_match(importee) {
-                let pathstr = path.to_str().unwrap();
-                pathstr.replace(".Tests.", ".").into()
-            } else {
-                emitter.emit(
-                    Message::Warning,
-                    "Unrecognized import statement".to_string(),
-                    PathBuf::from(path),
-                    line_no,
-                    line.to_string(),
-                    Some(
-                        "Note: Recognized imports are `$PSScriptRoot\\..` or `$here\\$sut`"
-                            .to_string(),
-                    ),
-                );
-                continue;
-            };
-            imports.push(Import {
-                line: line.to_owned(),
-                resolved_path,
-                line_no,
-            })
-        }
-
-        if let Some(captures) = DEFINITION.captures(line) {
-            definitions.push(Definition {
-                line: line.to_owned(),
-                line_no,
-                name: captures[1].to_owned(),
-            });
-        }
-
-        if let Some(captures) = USAGE.captures(line) {
-            usages.push(Usage {
-                line: line.to_owned(),
-                line_no,
-                name: captures[1].to_owned(),
-            });
-        }
-
-        if let Some(captures) = TESTCASE.captures(line) {
-            let invalid_chars: &[char] = &['"', '>', '<', '|', ':', '*', '?', '\\', '/'];
-            if uses_pester_logger && captures[1].contains(invalid_chars) {
-                emitter.emit(
-                    Message::Warning,
-                    "Testname contains invalid characters".to_owned(),
-                    path.to_owned(),
-                    line_no,
-                    line.to_owned(),
-                    Some(format!(
-                        "These characters are invalid in a file name: {:?}",
-                        invalid_chars
-                    )),
-                );
-            }
-        }
-    }
-
-    Ok(Parsed {
-        definitions,
-        usages,
-        imports,
-        original_path: path.to_owned(),
-    })
 }
