@@ -1,12 +1,14 @@
 extern crate shelly;
 
-use std::path::{Path, PathBuf};
-
 extern crate failure;
 use failure::Error;
 
 extern crate yansi;
 use yansi::{Color, Paint};
+
+use std::path::Path;
+
+use shelly::Location;
 
 fn main() {
     // Main is a thin wrapper around `run` designed to
@@ -41,16 +43,15 @@ impl shelly::Emitter for CliEmitter {
         &mut self,
         kind: shelly::Message,
         message: String,
-        file: PathBuf,
-        line_no: u32,
-        line: String,
+        location: Location,
         notes: Option<String>,
     ) {
         // Style of error message inspired by Rust
 
+        let line = location.line.line;
         let blue = Color::Blue.style().bold();
         let pipe = blue.paint("|");
-        let line_no = line_no.to_string();
+        let line_no = location.line.no.to_string();
         let offset = || {
             for _ in 0..line_no.len() {
                 print!(" ")
@@ -69,7 +70,7 @@ impl shelly::Emitter for CliEmitter {
         }
 
         offset();
-        println!("{} {}", blue.paint("-->"), file.display());
+        println!("{} {}", blue.paint("-->"), location.file.display());
 
         offset();
         println!(" {}", pipe);

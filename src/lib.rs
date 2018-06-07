@@ -14,18 +14,43 @@ use failure::ResultExt;
 
 use std::collections::BTreeMap as Map;
 use std::collections::BTreeSet as Set;
+use std::fs;
 use std::path::{Path, PathBuf};
 
-use syntax::Parsed;
+pub use syntax::Line;
+
+#[derive(Default, Debug)]
+pub struct Location {
+    pub file: PathBuf,
+    pub line: Line,
+}
+
+impl Line {
+    fn in_file(&self, file: &Path) -> Location {
+        Location {
+            line: self.to_owned(),
+            file: file.to_owned(),
+        }
+    }
+}
+
+/// Parsed and preprocessed source file
+#[derive(Debug)]
+struct Parsed {
+    imports: Vec<PathBuf>,
+    definitions: Vec<syntax::Definition>,
+    usages: Vec<syntax::Usage>,
+
+    /// Original, non-resolved path, relative to PWD
+    original_path: PathBuf,
+}
 
 pub trait Emitter {
     fn emit(
         &mut self,
         kind: Message,
         message: String,
-        file: PathBuf,
-        line_no: u32,
-        line: String,
+        location: Location,
         notes: Option<String>,
     );
 }
@@ -34,9 +59,7 @@ pub trait Emitter {
 pub struct EmittedItem {
     pub kind: Message,
     pub message: String,
-    pub file: PathBuf,
-    pub line_no: u32,
-    pub line: String,
+    pub location: Location,
     pub notes: Option<String>,
 }
 
@@ -45,7 +68,9 @@ pub struct VecEmitter {
 }
 
 impl VecEmitter {
-    pub fn new() -> VecEmitter { VecEmitter { emitted_items: Vec::new() }}
+    pub fn new() -> VecEmitter {
+        VecEmitter { emitted_items: Vec::new() }
+    }
 }
 
 impl Emitter for VecEmitter {
@@ -53,19 +78,10 @@ impl Emitter for VecEmitter {
         &mut self,
         kind: Message,
         message: String,
-        file: PathBuf,
-        line_no: u32,
-        line: String,
+        location: Location,
         notes: Option<String>,
     ) {
-        let to_emit: EmittedItem = EmittedItem {
-            kind: kind,
-            message: message,
-            file: file,
-            line_no: line_no,
-            line: line,
-            notes: notes,
-        };
+        let to_emit = EmittedItem { kind, message, location, notes };
         self.emitted_items.push(to_emit)
     }
 }
@@ -89,35 +105,18 @@ pub fn run_(root_path: &Path, emitter: &mut Emitter) -> Result<(), Error> {
             continue;
         }
 
-        let mut import_error = false;
-        let mut parsed = syntax::parse(entry.path(), emitter)?;
-        for import in &parsed.imports {
-            if !import.resolved_path.exists() {
-                import_error = true;
-                emitter.emit(
-                    Message::Error,
-                    "Invalid import".to_string(),
-                    PathBuf::from(entry.path()),
-                    import.line_no,
-                    import.line.to_string(),
-                    Some(format!(
-                        "File not found: {}",
-                        import.resolved_path.display()
-                    )),
+        match parse_and_preprocess(entry.path(), emitter)? {
+            PreprocessOutput::Valid(parsed) => {
+                let path = entry.path().canonicalize()?;
+                files.insert(path, parsed);
+            }
+            PreprocessOutput::InvalidImports => {
+                eprintln!(
+                    "Stopping analysis for this file because of import errors: {}\n",
+                    entry.path().display()
                 );
             }
-        }
-        if import_error {
-            continue;
-        }
-
-        for import in &mut parsed.imports {
-            let path = std::mem::replace(&mut import.resolved_path, PathBuf::new());
-            import.resolved_path = path.canonicalize()?;
-        }
-
-        let path = entry.path().canonicalize()?;
-        files.insert(path, parsed);
+        };
     }
 
     analyze(&files, emitter).context("analyzing")?;
@@ -193,7 +192,7 @@ fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) -> Result<(), Er
             if BUILTINS.contains(usage.name.as_str()) {
                 continue;
             }
-            if is_allowed(&usage.line, &usage.name) {
+            if is_allowed(&usage.location.line, &usage.name) {
                 continue;
             }
             if already_analyzed.contains(usage.name.as_str()) {
@@ -206,17 +205,13 @@ fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) -> Result<(), Er
                 None => emitter.emit(
                     Message::Error,
                     format!("Not in scope: {}", usage.name),
-                    PathBuf::from(parsed.original_path.clone()),
-                    usage.line_no,
-                    usage.line.to_string(),
+                    usage.location.in_file(&parsed.original_path),
                     None,
                 ),
                 Some(Found::Indirect) => emitter.emit(
                     Message::Warning,
                     format!("Indirectly imported: {}", usage.name),
-                    PathBuf::from(parsed.original_path.clone()),
-                    usage.line_no,
-                    usage.line.to_string(),
+                    usage.location.in_file(&parsed.original_path),
                     None,
                 ),
                 _ => (),
@@ -264,7 +259,7 @@ fn get_scope<'a>(
     let mut scope = Scope::default();
 
     for import in &parsed_file.imports {
-        let nested = get_scope(&import.resolved_path, files, scopes)?;
+        let nested = get_scope(&import, files, scopes)?;
         scope.directly_imported.extend(&nested.defined);
         scope.all.extend(&nested.all);
         scope.files.extend(&nested.files);
@@ -291,4 +286,110 @@ pub enum Message {
 
 impl Default for Message {
     fn default() -> Message { Message::Error }
+}
+
+#[derive(Debug)]
+enum PreprocessOutput {
+    /// Parsed and preprocessed file
+    Valid(Parsed),
+
+    /// A file can't be preprocessed since it contains invalid imports
+    InvalidImports,
+}
+
+/// Parses and preprocesses a file for further analysys.
+fn parse_and_preprocess(path: &Path, emitter: &mut Emitter) -> Result<PreprocessOutput, Error> {
+    let source = fs::read_to_string(path)?;
+    let file = syntax::parse(&source);
+
+    for testcase in file.testcases {
+        let invalid_chars: &[char] = &['"', '>', '<', '|', ':', '*', '?', '\\', '/'];
+
+        if file.uses_pester_logger && testcase.name.contains(invalid_chars) {
+            emitter.emit(
+                Message::Warning,
+                "Testname contains invalid characters".to_owned(),
+                testcase.location.in_file(path),
+                Some(format!(
+                    "These characters are invalid in a file name: {:?}",
+                    invalid_chars,
+                )),
+            );
+        }
+    }
+
+    let resolved_imports = match resolve_imports(path, file.imports, emitter)? {
+        Some(imports) => imports,
+        None => return Ok(PreprocessOutput::InvalidImports),
+    };
+
+    Ok(PreprocessOutput::Valid(Parsed {
+        imports: resolved_imports,
+        definitions: file.definitions,
+        usages: file.usages,
+        original_path: path.to_owned(),
+    }))
+}
+
+/// Verifies imports and canonicalizes their paths
+///
+/// Returns None if any of imports were not recognized
+fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &mut Emitter)
+    -> Result<Option<Vec<PathBuf>>, Error>
+{
+    let mut import_error = false;
+    let mut resolved_imports = Vec::new();
+
+    for import in imports {
+        use syntax::Importee;
+
+        let dir = source_path.parent().unwrap();
+        let filename = source_path.file_name().unwrap().to_str().unwrap();
+
+        let dest_path = match import.importee {
+            Importee::Relative(relative_path) => dir.join(relative_path),
+            Importee::HereSut => dir.join(filename.replace(".Tests", "")),
+            Importee::Unrecognized(_) => {
+                // Should we treat unrecognized import as an error also?
+                // This will stop processing the file further and will result in
+                // less spammy output, because we'll probably get some
+                // "Not in scope" errors later on.
+                // import_error = true;
+
+                emitter.emit(
+                    Message::Warning,
+                    "Unrecognized import statement".to_string(),
+                    import.location.in_file(source_path),
+                    Some(
+                        "Note: Recognized imports are `$PSScriptRoot\\..` or `$here\\$sut`"
+                            .to_string(),
+                    ),
+                );
+
+                continue;
+            }
+        };
+
+        if dest_path.exists() {
+            resolved_imports.push(dest_path.canonicalize()?)
+        } else {
+            import_error = true;
+
+            emitter.emit(
+                Message::Error,
+                "Invalid import".to_string(),
+                import.location.in_file(source_path),
+                Some(format!(
+                    "File not found: {}",
+                    dest_path.display()
+                )),
+            );
+        }
+    }
+
+    if import_error {
+        return Ok(None)
+    }
+
+    Ok(Some(resolved_imports))
 }
