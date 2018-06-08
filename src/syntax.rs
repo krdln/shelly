@@ -59,8 +59,8 @@ pub struct Testcase {
     pub name: String,
 }
 
-/// Reads and parses source file
-pub fn parse(file: &str) -> File {
+/// Parses a source file
+pub fn parse(source: &str) -> File {
     lazy_static! {
         static ref IMPORT: Regex = Regex::new(
             r"(?ix) ^ \s* \. \s+ (.*?) \s* (\#.*)? $"
@@ -92,16 +92,16 @@ pub fn parse(file: &str) -> File {
     }
 
     // Strip BOM
-    let file = file.trim_left_matches('\u{feff}');
+    let source = source.trim_left_matches('\u{feff}');
 
     let mut definitions = Vec::new();
     let mut usages = Vec::new();
     let mut imports = Vec::new();
     let mut testcases = Vec::new();
 
-    let uses_pester_logger = file.contains("Initialize-PesterLogger");
+    let uses_pester_logger = source.contains("Initialize-PesterLogger");
 
-    for (line, line_no) in file.lines().zip(1..) {
+    for (line, line_no) in source.lines().zip(1..) {
 
         let get_location = || Line { line: line.to_owned(), no: line_no };
 
