@@ -108,6 +108,28 @@ pub trait Emitter {
         location: Location,
         notes: Option<String>,
     );
+
+    fn emit_error(&mut self, message: impl Into<String>, location: Location, notes: Option<String>)
+    where Self: Sized {
+        self.emit(Message::Error, message.into(), location, notes);
+    }
+
+    fn emit_warning(&mut self, message: impl Into<String>, location: Location, notes: Option<String>)
+    where Self: Sized {
+        self.emit(Message::Warning, message.into(), location, notes);
+    }
+}
+
+impl<'a> Emitter for &'a mut Emitter {
+    fn emit(
+        &mut self,
+        kind: Message,
+        message: String,
+        location: Location,
+        notes: Option<String>,
+    ) {
+        (*self).emit(kind, message, location, notes)
+    }
 }
 
 #[derive(Default)]

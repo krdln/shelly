@@ -36,9 +36,8 @@ pub fn parse_and_preprocess(path: &Path, emitter: &mut Emitter) -> Result<Prepro
         let invalid_chars: &[char] = &['"', '>', '<', '|', ':', '*', '?', '\\', '/'];
 
         if file.uses_pester_logger && testcase.name.contains(invalid_chars) {
-            emitter.emit(
-                Message::Warning,
-                "Testname contains invalid characters".to_owned(),
+            emitter.emit_warning(
+                "Testname contains invalid characters",
                 testcase.location.in_file(path),
                 Some(format!(
                     "These characters are invalid in a file name: {:?}",
@@ -86,9 +85,8 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
                 // "Not in scope" errors later on.
                 // import_error = true;
 
-                emitter.emit(
-                    Message::Warning,
-                    "Unrecognized import statement".to_string(),
+                emitter.emit_warning(
+                    "Unrecognized import statement",
                     import.location.in_file(source_path),
                     Some(
                         "Note: Recognized imports are `$PSScriptRoot\\..` or `$here\\$sut`"
@@ -105,9 +103,8 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
         } else {
             import_error = true;
 
-            emitter.emit(
-                Message::Error,
-                "Invalid import".to_string(),
+            emitter.emit_error(
+                "Invalid import",
                 import.location.in_file(source_path),
                 Some(format!(
                     "File not found: {}",

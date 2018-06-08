@@ -87,14 +87,12 @@ pub fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) -> Result<()
             already_analyzed.insert(usage.name.as_str());
 
             match scope.search(&usage.name) {
-                None => emitter.emit(
-                    Message::Error,
+                None => emitter.emit_error(
                     format!("Not in scope: {}", usage.name),
                     usage.location.in_file(&parsed.original_path),
                     None,
                 ),
-                Some(Found::Indirect) => emitter.emit(
-                    Message::Warning,
+                Some(Found::Indirect) => emitter.emit_warning(
                     format!("Indirectly imported: {}", usage.name),
                     usage.location.in_file(&parsed.original_path),
                     None,
