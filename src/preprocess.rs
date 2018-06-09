@@ -8,13 +8,13 @@ use Emitter;
 use Message;
 
 /// Parsed and preprocessed source file
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Parsed {
     pub imports: Vec<PathBuf>,
     pub definitions: Vec<syntax::Definition>,
     pub usages: Vec<syntax::Usage>,
 
-    /// Original, non-resolved path, relative to PWD
+    /// Original, non-resolved path, relative to PWD. Used for error reporting.
     pub original_path: PathBuf,
 }
 

@@ -72,7 +72,7 @@ fn is_allowed(line: &str, what: &str) -> bool {
 }
 
 /// Kind of error message
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Message {
     Error,
     Warning,

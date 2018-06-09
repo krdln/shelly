@@ -147,3 +147,99 @@ fn get_scope<'a>(
 
     Ok(scope)
 }
+
+#[cfg(test)]
+mod test {
+    use syntax::{Line, Definition, Usage};
+    use VecEmitter;
+    use super::*;
+
+    fn usage(fun: &str) -> Usage {
+        Usage {
+            location: Line { line: fun.to_owned(), no: 1 },
+            name: fun.to_owned(),
+        }
+    }
+
+    fn definition(fun: &str) -> Definition {
+        Definition {
+            location: Line { line: fun.to_owned(), no: 1 },
+            name: fun.to_owned(),
+        }
+    }
+
+    #[test]
+    fn test_happy() {
+        let files = vec![
+            (
+                "A".into(),
+                Parsed {
+                    imports: vec!["B".into()],
+                    usages: vec![usage("A1"), usage("B1")],
+                    definitions: vec![definition("A1")],
+                    ..Parsed::default()
+                }
+            ),
+            (
+                "B".into(),
+                Parsed {
+                    definitions: vec![definition("B1")],
+                    ..Parsed::default()
+                }
+            ),
+        ].into_iter().collect();
+
+        let mut emitter = VecEmitter::new();
+        analyze(&files, &mut emitter).unwrap();
+
+        assert!(emitter.emitted_items.is_empty());
+    }
+
+    #[test]
+    fn test_loop() {
+        let files = vec![
+            ("A".into(), Parsed { imports: vec!["B".into()], ..Parsed::default() }),
+            ("B".into(), Parsed { imports: vec!["A".into()], ..Parsed::default() }),
+        ].into_iter().collect();
+
+        let mut emitter = VecEmitter::new();
+        let res = analyze(&files, &mut emitter);
+
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_error() {
+        let files = vec![
+            ("A".into(), Parsed { usages: vec![usage("Foo")], ..Parsed::default() }),
+        ].into_iter().collect();
+
+        let mut emitter = VecEmitter::new();
+        analyze(&files, &mut emitter).unwrap();
+
+        assert_eq!(emitter.emitted_items.len(), 1);
+        assert_eq!(emitter.emitted_items[0].kind, Message::Error);
+    }
+
+    #[test]
+    fn test_indirect_warning() {
+        let files = vec![
+            (
+                "A".into(),
+                Parsed {
+                    usages: vec![usage("C1")],
+                    imports: vec!["B".into()],
+                    ..Parsed::default()
+                }
+            ),
+            ("B".into(), Parsed { imports: vec!["C".into()], ..Parsed::default() }),
+            ("C".into(), Parsed { definitions: vec![definition("C1")], ..Parsed::default() }),
+        ].into_iter().collect();
+
+        let mut emitter = VecEmitter::new();
+        analyze(&files, &mut emitter).unwrap();
+
+        assert_eq!(emitter.emitted_items.len(), 1);
+        assert_eq!(emitter.emitted_items[0].kind, Message::Warning);
+    }
+}
