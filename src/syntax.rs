@@ -27,7 +27,7 @@ pub struct Import {
 }
 
 /// An importee pointed by `.` import
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Importee {
     /// `$PSScriptRoot/...`
     Relative(PathBuf),
@@ -154,4 +154,68 @@ pub fn parse(source: &str) -> File {
         testcases,
         uses_pester_logger,
     }
+}
+
+#[test]
+fn test_basics() {
+    let source = r#"
+        . $here/$sut
+        . "$here/$sut"
+        . $PSScriptRoot/foo/bar
+        . $PSScriptRoot/foo/quux # Because
+        . blablabla
+
+        function Foo {
+        }
+
+        function Bar() {}
+
+        Fooize-Bar -Baz "quux"
+        $A = Write-Host
+        $X.Field = Write-Log
+
+        Describe "something" {
+            It "works" {}
+        }
+    "#;
+
+    let parsed = parse(source);
+
+    assert_eq!(parsed.imports[0].importee, Importee::HereSut);
+    assert_eq!(parsed.imports[1].importee, Importee::HereSut);
+    assert_eq!(parsed.imports[2].importee, Importee::Relative("foo/bar".into()));
+    assert_eq!(parsed.imports[3].importee, Importee::Relative("foo/quux".into()));
+    assert_eq!(parsed.imports[4].importee, Importee::Unrecognized("blablabla".into()));
+
+    assert_eq!(parsed.definitions[0].name, "Foo");
+    assert_eq!(parsed.definitions[1].name, "Bar");
+
+    assert_eq!(parsed.usages[0].name, "Fooize-Bar");
+    assert_eq!(parsed.usages[1].name, "Write-Host");
+    assert_eq!(parsed.usages[2].name, "Write-Log");
+
+    assert_eq!(parsed.testcases[0].name, "works");
+}
+
+// This test should stop to pass
+// when the parser will be implemented correctly.
+#[test]
+fn test_nested() {
+    let source = r#"
+        function Foo {
+            function Nested {
+            }
+        }
+    "#;
+
+    let parsed = parse(source);
+
+    let mut funs: Vec<_> = parsed.definitions
+        .iter()
+        .map(|def| &def.name)
+        .collect();
+
+    funs.sort();
+
+    assert_eq!(funs, ["Foo", "Nested"]);
 }
