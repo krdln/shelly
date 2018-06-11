@@ -8,6 +8,7 @@ extern crate lazy_static;
 mod syntax;
 mod preprocess;
 mod scope;
+mod strictness;
 
 use walkdir::WalkDir;
 
@@ -52,7 +53,9 @@ fn run_(root_path: &Path, emitter: &mut Emitter) -> Result<(), Error> {
         };
     }
 
-    scope::analyze(&files, emitter).context("analyzing")?;
+    let scopes = scope::analyze(&files, emitter).context("analyzing")?;
+
+    strictness::analyze(&files, &scopes, emitter);
 
     Ok(())
 }

@@ -11,14 +11,14 @@ use is_allowed;
 
 /// Functions in scope
 #[derive(Debug, Clone, Default)]
-struct Scope<'a> {
-    /// Functions defined in this scopeanalyze
+pub struct Scope<'a> {
+    /// Functions defined in this scope
     defined: Set<&'a str>,
-    /// Defined by a file imported by `analyze
+    /// Defined by a file imported by `.`
     directly_imported: Set<&'a str>,
     /// All the functions in scope
-    all: Set<&'a str>,
-    /// All the files imported (directlanalyzely)
+    pub all: Set<&'a str>,
+    /// All the files imported (directly and indirectly)
     files: Set<&'a Path>,
 }
 
@@ -56,7 +56,9 @@ enum ScopeWip<'a> {
     Current,
 }
 
-pub fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) -> Result<(), Error> {
+pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, emitter: &mut Emitter)
+    -> Result<Map<&'a Path, Scope<'a>>, Error>
+{
     lazy_static! {
         static ref BUILTINS: Set<&'static str> = include_str!("builtins.txt")
             .split_whitespace()
@@ -104,7 +106,18 @@ pub fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) -> Result<()
         }
     }
 
-    Ok(())
+    let scopes = scopes.into_iter()
+        .map(
+            |(file, scope_wip)| {
+                match scope_wip {
+                    ScopeWip::Resolved(scope) => (file, scope),
+                    ScopeWip::Current => unreachable!(),
+                }
+            }
+        )
+        .collect();
+
+    Ok(scopes)
 }
 
 fn get_scope<'a>(

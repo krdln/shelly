@@ -53,9 +53,23 @@ pub fn parse_and_preprocess(path: &Path, emitter: &mut Emitter) -> Result<Prepro
         None => return Ok(PreprocessOutput::InvalidImports),
     };
 
+    let mut definitions = file.definitions;
+    // We treat setting strict mode as defining
+    // a "!EnablesStrictMode" pseudo-item.
+    // TODO make Definition a proper enum to support this case.
+    for usage in &file.usages {
+        if usage.name == "Set-StrictMode" {
+            definitions.push(::syntax::Definition {
+                name: ::strictness::STRICT_MODE_PSEUDOITEM_NAME.into(),
+                location: usage.location.clone()
+            });
+            break;
+        }
+    }
+
     Ok(PreprocessOutput::Valid(Parsed {
         imports: resolved_imports,
-        definitions: file.definitions,
+        definitions: definitions,
         usages: file.usages,
         original_path: path.to_owned(),
     }))
