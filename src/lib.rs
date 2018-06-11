@@ -88,13 +88,22 @@ pub use syntax::Line;
 #[derive(Default, Debug)]
 pub struct Location {
     pub file: PathBuf,
-    pub line: Line,
+    pub line: Option<Line>,
+}
+
+impl Location {
+    fn whole_file(file: &Path) -> Location {
+        Location {
+            line: None,
+            file: file.to_owned(),
+        }
+    }
 }
 
 impl Line {
     fn in_file(&self, file: &Path) -> Location {
         Location {
-            line: self.to_owned(),
+            line: Some(self.to_owned()),
             file: file.to_owned(),
         }
     }

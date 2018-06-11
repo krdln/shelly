@@ -8,7 +8,7 @@ use yansi::{Color, Paint};
 
 use std::path::Path;
 
-use shelly::Location;
+use shelly::{Line, Location};
 
 fn main() {
     // Main is a thin wrapper around `run` designed to
@@ -48,15 +48,21 @@ impl shelly::Emitter for CliEmitter {
     ) {
         // Style of error message inspired by Rust
 
-        let line = location.line.line;
-        let blue = Color::Blue.style().bold();
-        let pipe = blue.paint("|");
-        let line_no = location.line.no.to_string();
+        let line_no = location.line
+            .as_ref()
+            .map_or_else(
+                || " ".to_string(),
+                |line| line.no.to_string()
+            );
+
         let offset = || {
             for _ in 0..line_no.len() {
                 print!(" ")
             }
         };
+
+        let blue = Color::Blue.style().bold();
+        let pipe = blue.paint("|");
 
         match kind {
             shelly::Message::Error => {
@@ -72,15 +78,17 @@ impl shelly::Emitter for CliEmitter {
         offset();
         println!("{} {}", blue.paint("-->"), location.file.display());
 
-        offset();
-        println!(" {}", pipe);
+        if let Some(Line { line, .. }) = location.line {
+            offset();
+            println!(" {}", pipe);
 
-        println!("{} {} {}", blue.paint(&line_no), pipe, line);
-
-        offset();
-        println!(" {}", pipe);
+            println!("{} {} {}", blue.paint(&line_no), pipe, line);
+        }
 
         if let Some(notes) = notes {
+            offset();
+            println!(" {}", pipe);
+
             for line in notes.lines() {
                 offset();
                 println!(" {} {}", blue.paint("="), line);
