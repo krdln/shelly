@@ -5,6 +5,7 @@ extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 
+pub mod lint;
 mod syntax;
 mod preprocess;
 mod scope;
@@ -77,8 +78,8 @@ fn is_allowed(line: &str, what: &str) -> bool {
 /// Kind of error message
 #[derive(Debug, Eq, PartialEq)]
 pub enum Message {
-    Error,
     Warning,
+    Error,
 }
 
 impl Default for Message {
