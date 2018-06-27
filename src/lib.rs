@@ -19,6 +19,8 @@ use failure::ResultExt;
 use std::collections::BTreeMap as Map;
 use std::path::{Path, PathBuf};
 
+use lint::Lint;
+
 pub fn run(root_path: impl AsRef<Path>, emitter: &mut Emitter) -> Result<(), Error> {
     run_(root_path.as_ref(), emitter)
 }
@@ -116,6 +118,7 @@ impl Line {
 pub trait Emitter {
     fn emit(
         &mut self,
+        lint: Option<Lint>,
         kind: Message,
         message: String,
         location: Location,
@@ -125,6 +128,7 @@ pub trait Emitter {
 
 #[derive(Default)]
 pub struct EmittedItem {
+    pub lint: Option<Lint>,
     pub kind: Message,
     pub message: String,
     pub location: Location,
@@ -144,12 +148,13 @@ impl VecEmitter {
 impl Emitter for VecEmitter {
     fn emit(
         &mut self,
+        lint: Option<Lint>,
         kind: Message,
         message: String,
         location: Location,
         notes: Option<String>,
     ) {
-        let to_emit = EmittedItem { kind, message, location, notes };
+        let to_emit = EmittedItem { kind, message, location, notes, lint };
         self.emitted_items.push(to_emit)
     }
 }

@@ -37,6 +37,7 @@ pub fn parse_and_preprocess(path: &Path, emitter: &mut Emitter) -> Result<Prepro
 
         if file.uses_pester_logger && testcase.name.contains(invalid_chars) {
             emitter.emit(
+                None,
                 Message::Warning,
                 "Testname contains invalid characters".to_owned(),
                 testcase.location.in_file(path),
@@ -101,6 +102,7 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
                 // import_error = true;
 
                 emitter.emit(
+                    None,
                     Message::Warning,
                     "Unrecognized import statement".to_string(),
                     import.location.in_file(source_path),
@@ -120,6 +122,7 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
             import_error = true;
 
             emitter.emit(
+                None,
                 Message::Error,
                 "Invalid import".to_string(),
                 import.location.in_file(source_path),

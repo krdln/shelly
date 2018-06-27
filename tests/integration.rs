@@ -4,17 +4,20 @@ extern crate tempdir;
 
 mod helpers;
 
+use shelly::lint::Lint;
+
 use helpers::{
     test_dir,
     test_file,
-    Contents,
-    contains_message,
+    Contents
 };
 
 #[test]
 fn something_works() {
     let errors = test_dir("case1");
-    assert!(contains_message(&errors, "Not in scope"));
+    let lints: Vec<_> = errors.into_iter().map(|error| error.lint).collect();
+    assert!(lints.contains(&Some(Lint::UnknownFunctions)));
+    assert!(lints.contains(&Some(Lint::NoStrictMode)));
 }
 
 #[test]
@@ -22,8 +25,9 @@ fn it_can_be_tested_on_string() {
     let errors = test_file(Contents(r#"
         Write-Poem -About "shelly"
     "#));
-    assert!(contains_message(&errors, "Not in scope"));
-    assert!(!contains_message(&errors, "No such error"));
+    let lints: Vec<_> = errors.into_iter().map(|error| error.lint).collect();
+    assert!(lints.contains(&Some(Lint::UnknownFunctions)));
+    assert!(lints.contains(&Some(Lint::NoStrictMode)));
 }
 
 #[test]

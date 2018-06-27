@@ -8,7 +8,7 @@ use yansi::{Color, Paint};
 
 use std::path::Path;
 
-use shelly::{Line, Location};
+use shelly::{Line, Location, lint::Lint};
 
 fn main() {
     // Main is a thin wrapper around `run` designed to
@@ -41,6 +41,7 @@ struct CliEmitter {}
 impl shelly::Emitter for CliEmitter {
     fn emit(
         &mut self,
+        _lint: Option<Lint>,
         kind: shelly::Message,
         message: String,
         location: Location,

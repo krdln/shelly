@@ -8,6 +8,7 @@ use Emitter;
 use Message;
 use preprocess::Parsed;
 use is_allowed;
+use lint::Lint;
 
 /// Functions in scope
 #[derive(Debug, Clone, Default)]
@@ -90,12 +91,14 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, emitter: &mut Emitter)
 
             match scope.search(&usage.name) {
                 None => emitter.emit(
+                    Some(Lint::UnknownFunctions),
                     Message::Error,
                     format!("Not in scope: {}", usage.name),
                     usage.location.in_file(&parsed.original_path),
                     None,
                 ),
                 Some(Found::Indirect) => emitter.emit(
+                    Some(Lint::IndirectImports),
                     Message::Warning,
                     format!("Indirectly imported: {}", usage.name),
                     usage.location.in_file(&parsed.original_path),
@@ -188,15 +191,15 @@ mod test {
                 "A".into(),
                 Parsed {
                     imports: vec!["B".into()],
-                    usages: vec![usage("A1"), usage("B1")],
-                    definitions: vec![definition("A1")],
+                    usages: vec![usage("funA1"), usage("funB1")],
+                    definitions: vec![definition("funA1")],
                     ..Parsed::default()
                 }
             ),
             (
                 "B".into(),
                 Parsed {
-                    definitions: vec![definition("B1")],
+                    definitions: vec![definition("funB1")],
                     ..Parsed::default()
                 }
             ),
@@ -222,9 +225,9 @@ mod test {
     }
 
     #[test]
-    fn test_error() {
+    fn test_errors_when_function_is_used_but_not_defined_anywhere() {
         let files = vec![
-            ("A".into(), Parsed { usages: vec![usage("Foo")], ..Parsed::default() }),
+            ("A".into(), Parsed { usages: vec![usage("fun")], ..Parsed::default() }),
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
@@ -232,21 +235,22 @@ mod test {
 
         assert_eq!(emitter.emitted_items.len(), 1);
         assert_eq!(emitter.emitted_items[0].kind, Message::Error);
+        assert_eq!(emitter.emitted_items[0].lint, Some(Lint::UnknownFunctions));
     }
 
     #[test]
-    fn test_indirect_warning() {
+    fn test_warns_when_function_is_defined_not_directly_in_imported_file_but_deeper() {
         let files = vec![
             (
                 "A".into(),
                 Parsed {
-                    usages: vec![usage("C1")],
+                    usages: vec![usage("funC1")],
                     imports: vec!["B".into()],
                     ..Parsed::default()
                 }
             ),
             ("B".into(), Parsed { imports: vec!["C".into()], ..Parsed::default() }),
-            ("C".into(), Parsed { definitions: vec![definition("C1")], ..Parsed::default() }),
+            ("C".into(), Parsed { definitions: vec![definition("funC1")], ..Parsed::default() }),
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
@@ -254,5 +258,6 @@ mod test {
 
         assert_eq!(emitter.emitted_items.len(), 1);
         assert_eq!(emitter.emitted_items[0].kind, Message::Warning);
+        assert_eq!(emitter.emitted_items[0].lint, Some(Lint::IndirectImports));
     }
 }

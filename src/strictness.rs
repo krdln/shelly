@@ -7,6 +7,7 @@ use Message;
 use Location;
 use preprocess::Parsed;
 use scope::Scope;
+use lint::Lint;
 
 pub const STRICT_MODE_PSEUDOITEM_NAME: &str = "!EnablesStrictMode";
 
@@ -29,6 +30,7 @@ pub fn analyze<'a>(
     for file in &root_files {
         if !scopes[file].all.contains(STRICT_MODE_PSEUDOITEM_NAME) {
             emitter.emit(
+                Some(Lint::NoStrictMode),
                 Message::Warning,
                 "Strict mode not enabled for this file".to_owned(),
                 Location::whole_file(file),

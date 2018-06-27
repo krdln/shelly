@@ -10,9 +10,17 @@ pub enum Level {
 macro_rules! lints {
     ( $( #[$attr:meta] $name:ident : $slug:tt => $level:ident ),+ $(,)* ) => {
 
+        /// Lint is a type of error or warning that a linter can emit
         #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone)]
         pub enum Lint {
             $( #[ $attr ] $name ),+
+        }
+
+        impl Default for Lint {
+            fn default() -> Lint {
+                // TODO remove this default constructor for enum
+                Lint::UnknownFunctions
+            }
         }
 
         impl Lint {
