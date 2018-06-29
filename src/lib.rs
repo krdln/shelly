@@ -43,8 +43,11 @@ fn run_(root_path: &Path, emitter: &mut Emitter) -> Result<(), Error> {
         }
 
         match preprocess::parse_and_preprocess(entry.path(), emitter)? {
-            PreprocessOutput::Valid(parsed) => {
+            PreprocessOutput::Valid(mut parsed) => {
                 let path = entry.path().canonicalize()?;
+
+                strictness::preprocess(&mut parsed);
+
                 files.insert(path, parsed);
             }
             PreprocessOutput::InvalidImports => {
