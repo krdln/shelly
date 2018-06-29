@@ -96,7 +96,7 @@ impl Default for Message {
 pub use syntax::Line;
 
 /// Location of a message
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Location {
     pub file: PathBuf,
     pub line: Option<Line>,
@@ -123,7 +123,7 @@ impl Line {
 pub trait Emitter {
     fn emit(
         &mut self,
-        lint: Option<Lint>,
+        lint: Lint,
         kind: Message,
         message: String,
         location: Location,
@@ -131,9 +131,9 @@ pub trait Emitter {
     );
 }
 
-#[derive(Default)]
+#[derive(Debug)]
 pub struct EmittedItem {
-    pub lint: Option<Lint>,
+    pub lint: Lint,
     pub kind: Message,
     pub message: String,
     pub location: Location,
@@ -153,7 +153,7 @@ impl VecEmitter {
 impl Emitter for VecEmitter {
     fn emit(
         &mut self,
-        lint: Option<Lint>,
+        lint: Lint,
         kind: Message,
         message: String,
         location: Location,

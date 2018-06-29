@@ -16,8 +16,8 @@ use helpers::{
 fn something_works() {
     let errors = test_dir("case1");
     let lints: Vec<_> = errors.into_iter().map(|error| error.lint).collect();
-    assert!(lints.contains(&Some(Lint::UnknownFunctions)));
-    assert!(lints.contains(&Some(Lint::NoStrictMode)));
+    assert!(lints.contains(&Lint::UnknownFunctions));
+    assert!(lints.contains(&Lint::NoStrictMode));
 }
 
 #[test]
@@ -26,8 +26,8 @@ fn it_can_be_tested_on_string() {
         Write-Poem -About "shelly"
     "#));
     let lints: Vec<_> = errors.into_iter().map(|error| error.lint).collect();
-    assert!(lints.contains(&Some(Lint::UnknownFunctions)));
-    assert!(lints.contains(&Some(Lint::NoStrictMode)));
+    assert!(lints.contains(&Lint::UnknownFunctions));
+    assert!(lints.contains(&Lint::NoStrictMode));
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn test_invalid_characters() {
     "#));
 
     let lints: Vec<_> = errors.into_iter().map(|error| error.lint).collect();
-    assert!(lints.contains(&Some(Lint::InvalidTestnameCharacters)));
+    assert!(lints.contains(&Lint::InvalidTestnameCharacters));
 }
 
 #[test]

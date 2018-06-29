@@ -41,7 +41,7 @@ struct CliEmitter {}
 impl shelly::Emitter for CliEmitter {
     fn emit(
         &mut self,
-        _lint: Option<Lint>,
+        _lint: Lint,
         kind: shelly::Message,
         message: String,
         location: Location,

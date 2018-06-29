@@ -91,14 +91,14 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, emitter: &mut Emitter)
 
             match scope.search(&usage.name) {
                 None => emitter.emit(
-                    Some(Lint::UnknownFunctions),
+                    Lint::UnknownFunctions,
                     Message::Error,
                     format!("Not in scope: {}", usage.name),
                     usage.location.in_file(&parsed.original_path),
                     None,
                 ),
                 Some(Found::Indirect) => emitter.emit(
-                    Some(Lint::IndirectImports),
+                    Lint::IndirectImports,
                     Message::Warning,
                     format!("Indirectly imported: {}", usage.name),
                     usage.location.in_file(&parsed.original_path),
@@ -235,7 +235,7 @@ mod test {
 
         assert_eq!(emitter.emitted_items.len(), 1);
         assert_eq!(emitter.emitted_items[0].kind, Message::Error);
-        assert_eq!(emitter.emitted_items[0].lint, Some(Lint::UnknownFunctions));
+        assert_eq!(emitter.emitted_items[0].lint, Lint::UnknownFunctions);
     }
 
     #[test]
@@ -258,6 +258,6 @@ mod test {
 
         assert_eq!(emitter.emitted_items.len(), 1);
         assert_eq!(emitter.emitted_items[0].kind, Message::Warning);
-        assert_eq!(emitter.emitted_items[0].lint, Some(Lint::IndirectImports));
+        assert_eq!(emitter.emitted_items[0].lint, Lint::IndirectImports);
     }
 }

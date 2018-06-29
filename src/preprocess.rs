@@ -3,6 +3,7 @@ use failure::Error;
 use std::path::{Path, PathBuf};
 use std::fs;
 
+use lint::Lint;
 use syntax;
 use Emitter;
 use Message;
@@ -73,7 +74,7 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
                 // import_error = true;
 
                 emitter.emit(
-                    None,
+                    Lint::UnrecognizedImports,
                     Message::Warning,
                     "Unrecognized import statement".to_string(),
                     import.location.in_file(source_path),
@@ -93,7 +94,7 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
             import_error = true;
 
             emitter.emit(
-                None,
+                Lint::NonexistingImports,
                 Message::Error,
                 "Invalid import".to_string(),
                 import.location.in_file(source_path),

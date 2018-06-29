@@ -20,7 +20,7 @@ pub fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) {
         for testcase in &file.testcases {
             if testcase.name.contains(invalid_chars) {
                 emitter.emit(
-                    Some(Lint::InvalidTestnameCharacters),
+                    Lint::InvalidTestnameCharacters,
                     Message::Warning,
                     "Testname contains invalid characters".to_owned(),
                     testcase.location.in_file(&file.original_path),

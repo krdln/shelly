@@ -46,7 +46,7 @@ pub fn analyze<'a>(
     for file in &root_files {
         if !scopes[file].all.contains(STRICT_MODE_PSEUDOITEM_NAME) {
             emitter.emit(
-                Some(Lint::NoStrictMode),
+                Lint::NoStrictMode,
                 Message::Warning,
                 "Strict mode not enabled for this file".to_owned(),
                 Location::whole_file(file),

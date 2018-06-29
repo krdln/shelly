@@ -12,7 +12,7 @@ pub struct File {
 }
 
 /// A source file's line with its location
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Line {
     pub line: String,
     pub no: u32,

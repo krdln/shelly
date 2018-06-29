@@ -16,13 +16,6 @@ macro_rules! lints {
             $( #[ $attr ] $name ),+
         }
 
-        impl Default for Lint {
-            fn default() -> Lint {
-                // TODO remove this default constructor for enum
-                Lint::UnknownFunctions
-            }
-        }
-
         impl Lint {
             pub fn default_level(&self) -> Level {
                 match self {
