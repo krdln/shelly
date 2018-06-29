@@ -52,3 +52,30 @@ fn it_can_be_used_as_a_binary() {
     let output_string = ::std::str::from_utf8(&output.stdout).unwrap();
     assert!(output_string.contains("Not in scope"));
 }
+
+#[test]
+fn test_invalid_characters() {
+    let errors = test_file(Contents(r#"
+        Describe "A thing" {
+            BeforeEach {
+                Initialize-PesterLogger -Dir $Dir
+            }
+
+            It "Should w<>ork//////" {
+                Write-Host "bar"
+            }
+        }
+    "#));
+
+    let lints: Vec<_> = errors.into_iter().map(|error| error.lint).collect();
+    assert!(lints.contains(&Some(Lint::InvalidTestnameCharacters)));
+}
+
+#[test]
+fn test_perfection() {
+    let errors = test_file(Contents(r#"
+        Set-StrictMode -Version Latest
+    "#));
+
+    assert!(errors.is_empty());
+}

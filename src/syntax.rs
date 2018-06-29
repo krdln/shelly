@@ -9,7 +9,6 @@ pub struct File {
     pub definitions: Vec<Definition>,
     pub usages: Vec<Usage>,
     pub testcases: Vec<Testcase>,
-    pub uses_pester_logger: bool,
 }
 
 /// A source file's line with its location
@@ -99,8 +98,6 @@ pub fn parse(source: &str) -> File {
     let mut imports = Vec::new();
     let mut testcases = Vec::new();
 
-    let uses_pester_logger = source.contains("Initialize-PesterLogger");
-
     for (line, line_no) in source.lines().zip(1..) {
 
         let get_location = || Line { line: line.to_owned(), no: line_no };
@@ -152,7 +149,6 @@ pub fn parse(source: &str) -> File {
         usages,
         imports,
         testcases,
-        uses_pester_logger,
     }
 }
 

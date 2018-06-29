@@ -13,6 +13,7 @@ pub struct Parsed {
     pub imports: Vec<PathBuf>,
     pub definitions: Vec<syntax::Definition>,
     pub usages: Vec<syntax::Usage>,
+    pub testcases: Vec<syntax::Testcase>,
 
     /// Original, non-resolved path, relative to PWD. Used for error reporting.
     pub original_path: PathBuf,
@@ -32,23 +33,6 @@ pub fn parse_and_preprocess(path: &Path, emitter: &mut Emitter) -> Result<Prepro
     let source = fs::read_to_string(path)?;
     let file = syntax::parse(&source);
 
-    for testcase in file.testcases {
-        let invalid_chars: &[char] = &['"', '>', '<', '|', ':', '*', '?', '\\', '/'];
-
-        if file.uses_pester_logger && testcase.name.contains(invalid_chars) {
-            emitter.emit(
-                None,
-                Message::Warning,
-                "Testname contains invalid characters".to_owned(),
-                testcase.location.in_file(path),
-                Some(format!(
-                    "These characters are invalid in a file name: {:?}",
-                    invalid_chars,
-                )),
-            );
-        }
-    }
-
     let resolved_imports = match resolve_imports(path, file.imports, emitter)? {
         Some(imports) => imports,
         None => return Ok(PreprocessOutput::InvalidImports),
@@ -58,6 +42,7 @@ pub fn parse_and_preprocess(path: &Path, emitter: &mut Emitter) -> Result<Prepro
         imports: resolved_imports,
         definitions: file.definitions,
         usages: file.usages,
+        testcases: file.testcases,
         original_path: path.to_owned(),
     }))
 }

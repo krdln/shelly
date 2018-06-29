@@ -10,6 +10,7 @@ mod syntax;
 mod preprocess;
 mod scope;
 mod strictness;
+mod testnames;
 
 use walkdir::WalkDir;
 
@@ -62,6 +63,7 @@ fn run_(root_path: &Path, emitter: &mut Emitter) -> Result<(), Error> {
     let scopes = scope::analyze(&files, emitter).context("analyzing")?;
 
     strictness::analyze(&files, &scopes, emitter);
+    testnames::analyze(&files, emitter);
 
     Ok(())
 }
