@@ -7,7 +7,7 @@ use lint::Lint;
 use syntax;
 use Emitter;
 use EmittedItem;
-use Message;
+use MessageKind;
 
 /// Parsed and preprocessed source file
 #[derive(Debug, Default)]
@@ -77,7 +77,7 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
                 emitter.emit(
                     EmittedItem {
                         lint: Lint::UnrecognizedImports,
-                        kind: Message::Warning,
+                        kind: MessageKind::Warning,
                         message: "Unrecognized import statement".to_string(),
                         location: import.location.in_file(source_path),
                         notes: Some(
@@ -99,7 +99,7 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
             emitter.emit(
                 EmittedItem {
                     lint: Lint::NonexistingImports,
-                    kind: Message::Error,
+                    kind: MessageKind::Error,
                     message: "Invalid import".to_string(),
                     location: import.location.in_file(source_path),
                     notes: Some(format!(

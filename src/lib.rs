@@ -84,13 +84,13 @@ fn is_allowed(line: &str, what: &str) -> bool {
 
 /// Kind of error message
 #[derive(Debug, Eq, PartialEq)]
-pub enum Message {
+pub enum MessageKind {
     Warning,
     Error,
 }
 
-impl Default for Message {
-    fn default() -> Message { Message::Error }
+impl Default for MessageKind {
+    fn default() -> MessageKind { MessageKind::Error }
 }
 
 pub use syntax::Line;
@@ -127,7 +127,7 @@ pub trait Emitter {
 #[derive(Debug)]
 pub struct EmittedItem {
     pub lint: Lint,
-    pub kind: Message,
+    pub kind: MessageKind,
     pub message: String,
     pub location: Location,
     pub notes: Option<String>,

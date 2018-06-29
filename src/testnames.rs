@@ -5,7 +5,7 @@ use preprocess::Parsed;
 use lint::Lint;
 use Emitter;
 use EmittedItem;
-use Message;
+use MessageKind;
 
 pub fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) {
     let invalid_chars: &[char] = &['"', '>', '<', '|', ':', '*', '?', '\\', '/'];
@@ -23,7 +23,7 @@ pub fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) {
                 emitter.emit(
                     EmittedItem {
                         lint: Lint::InvalidTestnameCharacters,
-                        kind: Message::Warning,
+                        kind: MessageKind::Warning,
                         message: "Testname contains invalid characters".to_owned(),
                         location: testcase.location.in_file(&file.original_path),
                         notes: Some(format!(

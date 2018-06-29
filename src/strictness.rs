@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use Emitter;
 use EmittedItem;
-use Message;
+use MessageKind;
 use Location;
 use preprocess::Parsed;
 use scope::Scope;
@@ -49,7 +49,7 @@ pub fn analyze<'a>(
             emitter.emit(
                 EmittedItem {
                     lint: Lint::NoStrictMode,
-                    kind: Message::Warning,
+                    kind: MessageKind::Warning,
                     message: "Strict mode not enabled for this file".to_owned(),
                     location: Location::whole_file(file),
                     notes: None,

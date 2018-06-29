@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use Emitter;
 use EmittedItem;
-use Message;
+use MessageKind;
 use preprocess::Parsed;
 use is_allowed;
 use lint::Lint;
@@ -94,7 +94,7 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, emitter: &mut Emitter)
                 None => emitter.emit(
                     EmittedItem {
                         lint: Lint::UnknownFunctions,
-                        kind: Message::Error,
+                        kind: MessageKind::Error,
                         message: format!("Not in scope: {}", usage.name),
                         location: usage.location.in_file(&parsed.original_path),
                         notes: None,
@@ -103,7 +103,7 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, emitter: &mut Emitter)
                 Some(Found::Indirect) => emitter.emit(
                     EmittedItem {
                         lint: Lint::IndirectImports,
-                        kind: Message::Warning,
+                        kind: MessageKind::Warning,
                         message: format!("Indirectly imported: {}", usage.name),
                         location: usage.location.in_file(&parsed.original_path),
                         notes: None,
@@ -239,7 +239,7 @@ mod test {
         analyze(&files, &mut emitter).unwrap();
 
         assert_eq!(emitter.emitted_items.len(), 1);
-        assert_eq!(emitter.emitted_items[0].kind, Message::Error);
+        assert_eq!(emitter.emitted_items[0].kind, MessageKind::Error);
         assert_eq!(emitter.emitted_items[0].lint, Lint::UnknownFunctions);
     }
 
@@ -262,7 +262,7 @@ mod test {
         analyze(&files, &mut emitter).unwrap();
 
         assert_eq!(emitter.emitted_items.len(), 1);
-        assert_eq!(emitter.emitted_items[0].kind, Message::Warning);
+        assert_eq!(emitter.emitted_items[0].kind, MessageKind::Warning);
         assert_eq!(emitter.emitted_items[0].lint, Lint::IndirectImports);
     }
 }

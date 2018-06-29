@@ -59,10 +59,10 @@ impl shelly::Emitter for CliEmitter {
         let pipe = blue.paint("|");
 
         match item.kind {
-            shelly::Message::Error => {
+            shelly::MessageKind::Error => {
                 println!("{}: {}", Color::Red.style().bold().paint("error"), item.message)
             }
-            shelly::Message::Warning => println!(
+            shelly::MessageKind::Warning => println!(
                 "{}: {}",
                 Color::Yellow.style().bold().paint("warning"),
                 item.message
