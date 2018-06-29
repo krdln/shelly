@@ -8,7 +8,7 @@ use yansi::{Color, Paint};
 
 use std::path::Path;
 
-use shelly::{Line, Location, lint::Lint};
+use shelly::{Line, EmittedItem};
 
 fn main() {
     // Main is a thin wrapper around `run` designed to
@@ -39,17 +39,10 @@ fn run() -> Result<(), Error> {
 struct CliEmitter {}
 
 impl shelly::Emitter for CliEmitter {
-    fn emit(
-        &mut self,
-        _lint: Lint,
-        kind: shelly::Message,
-        message: String,
-        location: Location,
-        notes: Option<String>,
-    ) {
+    fn emit(&mut self, item: EmittedItem) {
         // Style of error message inspired by Rust
 
-        let line_no = location.line
+        let line_no = item.location.line
             .as_ref()
             .map_or_else(
                 || " ".to_string(),
@@ -65,28 +58,28 @@ impl shelly::Emitter for CliEmitter {
         let blue = Color::Blue.style().bold();
         let pipe = blue.paint("|");
 
-        match kind {
+        match item.kind {
             shelly::Message::Error => {
-                println!("{}: {}", Color::Red.style().bold().paint("error"), message)
+                println!("{}: {}", Color::Red.style().bold().paint("error"), item.message)
             }
             shelly::Message::Warning => println!(
                 "{}: {}",
                 Color::Yellow.style().bold().paint("warning"),
-                message
+                item.message
             ),
         }
 
         offset();
-        println!("{} {}", blue.paint("-->"), location.file.display());
+        println!("{} {}", blue.paint("-->"), item.location.file.display());
 
-        if let Some(Line { line, .. }) = location.line {
+        if let Some(Line { line, .. }) = item.location.line {
             offset();
             println!(" {}", pipe);
 
             println!("{} {} {}", blue.paint(&line_no), pipe, line);
         }
 
-        if let Some(notes) = notes {
+        if let Some(notes) = item.notes {
             offset();
             println!(" {}", pipe);
 

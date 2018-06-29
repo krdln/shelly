@@ -5,6 +5,7 @@ use std::collections::BTreeSet as Set;
 use std::path::{Path, PathBuf};
 
 use Emitter;
+use EmittedItem;
 use Message;
 use preprocess::Parsed;
 use is_allowed;
@@ -91,18 +92,22 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, emitter: &mut Emitter)
 
             match scope.search(&usage.name) {
                 None => emitter.emit(
-                    Lint::UnknownFunctions,
-                    Message::Error,
-                    format!("Not in scope: {}", usage.name),
-                    usage.location.in_file(&parsed.original_path),
-                    None,
+                    EmittedItem {
+                        lint: Lint::UnknownFunctions,
+                        kind: Message::Error,
+                        message: format!("Not in scope: {}", usage.name),
+                        location: usage.location.in_file(&parsed.original_path),
+                        notes: None,
+                    }
                 ),
                 Some(Found::Indirect) => emitter.emit(
-                    Lint::IndirectImports,
-                    Message::Warning,
-                    format!("Indirectly imported: {}", usage.name),
-                    usage.location.in_file(&parsed.original_path),
-                    None,
+                    EmittedItem {
+                        lint: Lint::IndirectImports,
+                        kind: Message::Warning,
+                        message: format!("Indirectly imported: {}", usage.name),
+                        location: usage.location.in_file(&parsed.original_path),
+                        notes: None,
+                    }
                 ),
                 _ => (),
             }

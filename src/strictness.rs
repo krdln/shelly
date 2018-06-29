@@ -3,6 +3,7 @@ use std::collections::BTreeMap as Map;
 use std::path::{Path, PathBuf};
 
 use Emitter;
+use EmittedItem;
 use Message;
 use Location;
 use preprocess::Parsed;
@@ -46,11 +47,13 @@ pub fn analyze<'a>(
     for file in &root_files {
         if !scopes[file].all.contains(STRICT_MODE_PSEUDOITEM_NAME) {
             emitter.emit(
-                Lint::NoStrictMode,
-                Message::Warning,
-                "Strict mode not enabled for this file".to_owned(),
-                Location::whole_file(file),
-                None,
+                EmittedItem {
+                    lint: Lint::NoStrictMode,
+                    kind: Message::Warning,
+                    message: "Strict mode not enabled for this file".to_owned(),
+                    location: Location::whole_file(file),
+                    notes: None,
+                }
             );
         }
     }

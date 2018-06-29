@@ -6,6 +6,7 @@ use std::fs;
 use lint::Lint;
 use syntax;
 use Emitter;
+use EmittedItem;
 use Message;
 
 /// Parsed and preprocessed source file
@@ -74,14 +75,16 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
                 // import_error = true;
 
                 emitter.emit(
-                    Lint::UnrecognizedImports,
-                    Message::Warning,
-                    "Unrecognized import statement".to_string(),
-                    import.location.in_file(source_path),
-                    Some(
-                        "Note: Recognized imports are `$PSScriptRoot\\..` or `$here\\$sut`"
+                    EmittedItem {
+                        lint: Lint::UnrecognizedImports,
+                        kind: Message::Warning,
+                        message: "Unrecognized import statement".to_string(),
+                        location: import.location.in_file(source_path),
+                        notes: Some(
+                            "Note: Recognized imports are `$PSScriptRoot\\..` or `$here\\$sut`"
                             .to_string(),
-                    ),
+                        ),
+                    }
                 );
 
                 continue;
@@ -94,14 +97,16 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
             import_error = true;
 
             emitter.emit(
-                Lint::NonexistingImports,
-                Message::Error,
-                "Invalid import".to_string(),
-                import.location.in_file(source_path),
-                Some(format!(
-                    "File not found: {}",
-                    dest_path.display()
-                )),
+                EmittedItem {
+                    lint: Lint::NonexistingImports,
+                    kind: Message::Error,
+                    message: "Invalid import".to_string(),
+                    location: import.location.in_file(source_path),
+                    notes: Some(format!(
+                        "File not found: {}",
+                        dest_path.display()
+                    )),
+                }
             );
         }
     }

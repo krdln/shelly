@@ -121,14 +121,7 @@ impl Line {
 }
 
 pub trait Emitter {
-    fn emit(
-        &mut self,
-        lint: Lint,
-        kind: Message,
-        message: String,
-        location: Location,
-        notes: Option<String>,
-    );
+    fn emit(&mut self, item: EmittedItem);
 }
 
 #[derive(Debug)]
@@ -151,15 +144,7 @@ impl VecEmitter {
 }
 
 impl Emitter for VecEmitter {
-    fn emit(
-        &mut self,
-        lint: Lint,
-        kind: Message,
-        message: String,
-        location: Location,
-        notes: Option<String>,
-    ) {
-        let to_emit = EmittedItem { kind, message, location, notes, lint };
+    fn emit(&mut self, to_emit: EmittedItem) {
         self.emitted_items.push(to_emit)
     }
 }

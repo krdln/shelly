@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use preprocess::Parsed;
 use lint::Lint;
 use Emitter;
+use EmittedItem;
 use Message;
 
 pub fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) {
@@ -20,14 +21,16 @@ pub fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) {
         for testcase in &file.testcases {
             if testcase.name.contains(invalid_chars) {
                 emitter.emit(
-                    Lint::InvalidTestnameCharacters,
-                    Message::Warning,
-                    "Testname contains invalid characters".to_owned(),
-                    testcase.location.in_file(&file.original_path),
-                    Some(format!(
-                        "These characters are invalid in a file name: {:?}",
-                        invalid_chars,
-                    )),
+                    EmittedItem {
+                        lint: Lint::InvalidTestnameCharacters,
+                        kind: Message::Warning,
+                        message: "Testname contains invalid characters".to_owned(),
+                        location: testcase.location.in_file(&file.original_path),
+                        notes: Some(format!(
+                            "These characters are invalid in a file name: {:?}",
+                            invalid_chars,
+                        )),
+                    }
                 );
             }
         }
