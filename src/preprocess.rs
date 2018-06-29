@@ -4,10 +4,8 @@ use std::path::{Path, PathBuf};
 use std::fs;
 
 use lint::Lint;
+use lint::Emitter;
 use syntax;
-use Emitter;
-use EmittedItem;
-use MessageKind;
 
 /// Parsed and preprocessed source file
 #[derive(Debug, Default)]
@@ -74,18 +72,10 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
                 // "Not in scope" errors later on.
                 // import_error = true;
 
-                emitter.emit(
-                    EmittedItem {
-                        lint: Lint::UnrecognizedImports,
-                        kind: MessageKind::Warning,
-                        message: "Unrecognized import statement".to_string(),
-                        location: import.location.in_file(source_path),
-                        notes: Some(
-                            "Note: Recognized imports are `$PSScriptRoot\\..` or `$here\\$sut`"
-                            .to_string(),
-                        ),
-                    }
-                );
+                import.location.in_file(source_path)
+                    .lint(Lint::UnrecognizedImports, "Unrecognized import statement")
+                    .note("Note: Recognized imports are `$PSScriptRoot\\..` or `$here\\$sut`")
+                    .emit(emitter);
 
                 continue;
             }
@@ -96,18 +86,10 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
         } else {
             import_error = true;
 
-            emitter.emit(
-                EmittedItem {
-                    lint: Lint::NonexistingImports,
-                    kind: MessageKind::Error,
-                    message: "Invalid import".to_string(),
-                    location: import.location.in_file(source_path),
-                    notes: Some(format!(
-                        "File not found: {}",
-                        dest_path.display()
-                    )),
-                }
-            );
+            import.location.in_file(source_path)
+                .lint(Lint::NonexistingImports, "Invalid import")
+                .note(format!("File not found: {}", dest_path.display()))
+                .emit(emitter);
         }
     }
 

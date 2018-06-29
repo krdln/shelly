@@ -26,8 +26,10 @@ pub fn run(root_path: impl AsRef<Path>, emitter: &mut Emitter) -> Result<(), Err
     run_(root_path.as_ref(), emitter)
 }
 
-fn run_(root_path: &Path, emitter: &mut Emitter) -> Result<(), Error> {
+fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
     use preprocess::PreprocessOutput;
+
+    let mut emitter = lint::Emitter::new(raw_emitter, lint::Config::default());
 
     let mut files = Map::new();
 
@@ -43,7 +45,7 @@ fn run_(root_path: &Path, emitter: &mut Emitter) -> Result<(), Error> {
             continue;
         }
 
-        match preprocess::parse_and_preprocess(entry.path(), emitter)? {
+        match preprocess::parse_and_preprocess(entry.path(), &mut emitter)? {
             PreprocessOutput::Valid(mut parsed) => {
                 let path = entry.path().canonicalize()?;
 
@@ -60,10 +62,10 @@ fn run_(root_path: &Path, emitter: &mut Emitter) -> Result<(), Error> {
         };
     }
 
-    let scopes = scope::analyze(&files, emitter).context("analyzing")?;
+    let scopes = scope::analyze(&files, &mut emitter).context("analyzing")?;
 
-    strictness::analyze(&files, &scopes, emitter);
-    testnames::analyze(&files, emitter);
+    strictness::analyze(&files, &scopes, &mut emitter);
+    testnames::analyze(&files, &mut emitter);
 
     Ok(())
 }

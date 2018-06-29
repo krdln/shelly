@@ -4,12 +4,10 @@ use std::collections::BTreeMap as Map;
 use std::collections::BTreeSet as Set;
 use std::path::{Path, PathBuf};
 
-use Emitter;
-use EmittedItem;
-use MessageKind;
+use lint::Emitter;
+use lint::Lint;
 use preprocess::Parsed;
 use is_allowed;
-use lint::Lint;
 
 /// Functions in scope
 #[derive(Debug, Clone, Default)]
@@ -91,24 +89,16 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, emitter: &mut Emitter)
             already_analyzed.insert(usage.name.as_str());
 
             match scope.search(&usage.name) {
-                None => emitter.emit(
-                    EmittedItem {
-                        lint: Lint::UnknownFunctions,
-                        kind: MessageKind::Error,
-                        message: format!("Not in scope: {}", usage.name),
-                        location: usage.location.in_file(&parsed.original_path),
-                        notes: None,
-                    }
-                ),
-                Some(Found::Indirect) => emitter.emit(
-                    EmittedItem {
-                        lint: Lint::IndirectImports,
-                        kind: MessageKind::Warning,
-                        message: format!("Indirectly imported: {}", usage.name),
-                        location: usage.location.in_file(&parsed.original_path),
-                        notes: None,
-                    }
-                ),
+                None => {
+                    usage.location.in_file(&parsed.original_path)
+                        .lint(Lint::UnknownFunctions, format!("Not in scope: {}", usage.name))
+                        .emit(emitter);
+                }
+                Some(Found::Indirect) => {
+                    usage.location.in_file(&parsed.original_path)
+                        .lint(Lint::IndirectImports, format!("Indirectly imported: {}", usage.name))
+                        .emit(emitter);
+                }
                 _ => (),
             }
         }
@@ -173,6 +163,8 @@ fn get_scope<'a>(
 mod test {
     use syntax::{Line, Definition, Usage};
     use VecEmitter;
+    use MessageKind;
+    use lint::Config;
     use super::*;
 
     fn usage(fun: &str) -> Usage {
@@ -211,7 +203,7 @@ mod test {
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
-        analyze(&files, &mut emitter).unwrap();
+        analyze(&files, &mut Emitter::new(&mut emitter, Config::default())).unwrap();
 
         assert!(emitter.emitted_items.is_empty());
     }
@@ -224,7 +216,7 @@ mod test {
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
-        let res = analyze(&files, &mut emitter);
+        let res = analyze(&files, &mut Emitter::new(&mut emitter, Config::default()));
 
         assert!(res.is_err());
     }
@@ -236,7 +228,7 @@ mod test {
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
-        analyze(&files, &mut emitter).unwrap();
+        analyze(&files, &mut Emitter::new(&mut emitter, Config::default())).unwrap();
 
         assert_eq!(emitter.emitted_items.len(), 1);
         assert_eq!(emitter.emitted_items[0].kind, MessageKind::Error);
@@ -259,7 +251,7 @@ mod test {
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
-        analyze(&files, &mut emitter).unwrap();
+        analyze(&files, &mut Emitter::new(&mut emitter, Config::default())).unwrap();
 
         assert_eq!(emitter.emitted_items.len(), 1);
         assert_eq!(emitter.emitted_items[0].kind, MessageKind::Warning);

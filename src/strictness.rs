@@ -2,13 +2,11 @@ use std::collections::BTreeSet as Set;
 use std::collections::BTreeMap as Map;
 use std::path::{Path, PathBuf};
 
-use Emitter;
-use EmittedItem;
-use MessageKind;
+use lint::Emitter;
+use lint::Lint;
 use Location;
 use preprocess::Parsed;
 use scope::Scope;
-use lint::Lint;
 
 const STRICT_MODE_PSEUDOITEM_NAME: &str = "!EnablesStrictMode";
 
@@ -46,15 +44,9 @@ pub fn analyze<'a>(
 
     for file in &root_files {
         if !scopes[file].all.contains(STRICT_MODE_PSEUDOITEM_NAME) {
-            emitter.emit(
-                EmittedItem {
-                    lint: Lint::NoStrictMode,
-                    kind: MessageKind::Warning,
-                    message: "Strict mode not enabled for this file".to_owned(),
-                    location: Location::whole_file(file),
-                    notes: None,
-                }
-            );
+            Location::whole_file(file)
+                .lint(Lint::NoStrictMode, "Strict mode not enabled for this file")
+                .emit(emitter);
         }
     }
 }

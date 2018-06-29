@@ -1,11 +1,9 @@
 use std::collections::BTreeMap as Map;
 use std::path::PathBuf;
 
-use preprocess::Parsed;
 use lint::Lint;
-use Emitter;
-use EmittedItem;
-use MessageKind;
+use lint::Emitter;
+use preprocess::Parsed;
 
 pub fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) {
     let invalid_chars: &[char] = &['"', '>', '<', '|', ':', '*', '?', '\\', '/'];
@@ -20,18 +18,10 @@ pub fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) {
 
         for testcase in &file.testcases {
             if testcase.name.contains(invalid_chars) {
-                emitter.emit(
-                    EmittedItem {
-                        lint: Lint::InvalidTestnameCharacters,
-                        kind: MessageKind::Warning,
-                        message: "Testname contains invalid characters".to_owned(),
-                        location: testcase.location.in_file(&file.original_path),
-                        notes: Some(format!(
-                            "These characters are invalid in a file name: {:?}",
-                            invalid_chars,
-                        )),
-                    }
-                );
+                testcase.location.in_file(&file.original_path)
+                    .lint(Lint::InvalidTestnameCharacters, "Testname contains invalid characters")
+                    .note(format!("These characters are invalid in a file name: {:?}", invalid_chars))
+                    .emit(emitter);
             }
         }
     }
