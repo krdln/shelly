@@ -1,4 +1,5 @@
 use std::collections::BTreeMap as Map;
+use std::str::FromStr;
 
 use EmittedItem;
 use Location;
@@ -99,6 +100,29 @@ impl Default for Config {
             cap: Level::Deny,
         }
     }
+}
+
+#[derive(Debug)]
+pub struct ConfigParseError;
+
+impl FromStr for Config {
+    type Err = ConfigParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        unimplemented!()
+        // Ok(Point { x: x_fromstr, y: y_fromstr })
+    }
+
+}
+
+#[test]
+fn config_from_string() {
+    let cfg_string = r#"
+[levels]
+nonexisting-imports = "warn"
+"#;
+    let config = Config::from_str(cfg_string).unwrap();
+    assert_eq!(config.overrides[&Lint::NonexistingImports], Level::Warn);
 }
 
 #[test]
