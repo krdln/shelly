@@ -9,6 +9,8 @@ lazy_static = "1.0.0"
 regex = "1.0.0"
 walkdir = "2.1.4"
 yansi = "0.4.0"
+clap = "2.32.0"
+structopt = "0.2.10"
 
 [dev-dependencies]
 tempdir = "0.3.7"

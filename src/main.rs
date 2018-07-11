@@ -8,7 +8,52 @@ use yansi::{Color, Paint};
 
 use std::path::Path;
 
-use shelly::{Line, EmittedItem};
+use shelly::{Line, EmittedItem, lint::{Lint, self}};
+
+#[macro_use]
+extern crate structopt;
+
+use structopt::StructOpt;
+
+#[derive(StructOpt, Debug)]
+struct Opt {
+    /// Directory with code to analyze
+    #[structopt(long = "directory", default_value = ".")]
+    directory: String,
+
+    /// Show available lints
+    #[structopt(subcommand)]
+    cmd: Option<Subcommand>,
+}
+
+#[derive(StructOpt, Debug)]
+enum Subcommand {
+    #[structopt(name = "show-lints")]
+    ShowLints,
+}
+
+fn run() -> Result<(), Error> {
+    if cfg!(windows) && !Paint::enable_windows_ascii() {
+        Paint::disable();
+    }
+
+    let opt = Opt::from_args();
+
+    if !Path::new(".git").exists() {
+        eprintln!("warning: not a root of a repository");
+    }
+
+    match opt.cmd {
+        Some(Subcommand::ShowLints) => {
+            print_lints();
+        }
+        None => {
+            shelly::run(opt.directory, &mut CliEmitter {})?
+        }
+    }
+
+    Ok(())
+}
 
 fn main() {
     // Main is a thin wrapper around `run` designed to
@@ -24,16 +69,12 @@ fn main() {
     }
 }
 
-fn run() -> Result<(), Error> {
-    if cfg!(windows) && !Paint::enable_windows_ascii() {
-        Paint::disable();
+fn print_lints() {
+    println!("Available lints:");
+    let config = lint::Config::default();
+    for lint in Lint::lints() {
+        println!("{}: {:?}", lint.slug(), lint.level(&config));
     }
-
-    if !Path::new(".git").exists() {
-        eprintln!("warning: not a root of a repository");
-    }
-
-    shelly::run(".", &mut CliEmitter {})
 }
 
 struct CliEmitter {}
