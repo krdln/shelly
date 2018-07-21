@@ -21,13 +21,13 @@ struct Opt {
     #[structopt(long = "directory", default_value = ".")]
     directory: String,
 
-    /// Show available lints
     #[structopt(subcommand)]
     cmd: Option<Subcommand>,
 }
 
 #[derive(StructOpt, Debug)]
 enum Subcommand {
+    /// Show available lints
     #[structopt(name = "show-lints")]
     ShowLints,
 }

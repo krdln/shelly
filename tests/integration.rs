@@ -79,3 +79,21 @@ fn test_perfection() {
 
     assert!(errors.is_empty());
 }
+
+#[test]
+fn test_allow_comments() {
+    let errors = test_file(Contents(r#"
+        Set-StrictMode -Version Latest
+
+        # This should produce an error
+        Write-Foo
+
+        # These should not
+        Write-Bar  # allow unknown-functions
+        Write-Baz  # Allow unknown-functions
+        Write-Quux # shelly: Allow unknown-functions
+        Write-Foo  # allow unknown-functions(Write-Foo)
+    "#));
+
+    assert_eq!(errors.len(), 1);
+}

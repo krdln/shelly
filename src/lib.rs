@@ -70,20 +70,6 @@ fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
     Ok(())
 }
 
-fn is_allowed(line: &str, what: &str) -> bool {
-    let mut chunks = line.splitn(2, "#");
-
-    match chunks.next() {
-        Some(_before_comment) => (),
-        None => return false,
-    }
-
-    match chunks.next() {
-        Some(comment) => comment.to_lowercase().contains("allow") && comment.contains(what),
-        None => false,
-    }
-}
-
 /// Kind of error message
 #[derive(Debug, Eq, PartialEq)]
 pub enum MessageKind {
@@ -98,7 +84,7 @@ impl Default for MessageKind {
 pub use syntax::Line;
 
 /// Location of a message
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Location {
     pub file: PathBuf,
     pub line: Option<Line>,

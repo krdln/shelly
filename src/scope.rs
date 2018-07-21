@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 use lint::Emitter;
 use lint::Lint;
 use preprocess::Parsed;
-use is_allowed;
 
 /// Functions in scope
 #[derive(Debug, Clone, Default)]
@@ -79,9 +78,6 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, emitter: &mut Emitter)
             if BUILTINS.contains(usage.name.as_str()) {
                 continue;
             }
-            if is_allowed(&usage.location.line, &usage.name) {
-                continue;
-            }
             if already_analyzed.contains(usage.name.as_str()) {
                 continue;
             }
@@ -92,11 +88,13 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, emitter: &mut Emitter)
                 None => {
                     usage.location.in_file(&parsed.original_path)
                         .lint(Lint::UnknownFunctions, format!("Not in scope: {}", usage.name))
+                        .what(usage.name.clone())
                         .emit(emitter);
                 }
                 Some(Found::Indirect) => {
                     usage.location.in_file(&parsed.original_path)
                         .lint(Lint::IndirectImports, format!("Indirectly imported: {}", usage.name))
+                        .what(usage.name.clone())
                         .emit(emitter);
                 }
                 _ => (),
