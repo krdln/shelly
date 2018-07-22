@@ -1,7 +1,0 @@
-[levels]
-nonexisting-imports = "deny"
-unrecognized-imports = "warn"
-unknown-functions = "deny"
-indirect-imports = "warn"
-invalid-testname-characters = "warn"
-no-strict-mode = "warn"

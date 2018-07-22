@@ -5,6 +5,7 @@ extern crate tempdir;
 mod helpers;
 
 use shelly::lint::Lint;
+use shelly::MessageKind;
 
 use helpers::{
     test_dir,
@@ -14,10 +15,27 @@ use helpers::{
 
 #[test]
 fn something_works() {
-    let errors = test_dir("case1");
+    let errors = test_dir("testcases/case1");
     let lints: Vec<_> = errors.into_iter().map(|error| error.lint).collect();
     assert!(lints.contains(&Lint::UnknownFunctions));
     assert!(lints.contains(&Lint::NoStrictMode));
+}
+
+#[test]
+fn loads_a_config() {
+    let errors = test_dir("testcases/with_config");
+    let lints: Vec<_> = errors.iter().map(|error| error.lint).collect();
+
+    assert_eq!(errors.len(), 2);
+    assert!(errors.iter().all(|err| err.kind == MessageKind::Error));
+
+    // Warn by default, overrided to deny
+    assert!(lints.contains(&Lint::UnknownFunctions));
+
+    assert!(lints.contains(&Lint::UnrecognizedImports));
+
+    // This is warn by default, overriden to allow
+    assert!(! lints.contains(&Lint::NoStrictMode));
 }
 
 #[test]
@@ -44,7 +62,7 @@ fn it_can_be_used_as_a_binary() {
     println!("{}", shelly_path.display());
 
     let output = Command::new(shelly_path)
-        .current_dir("tests/case1")
+        .current_dir("tests/testcases/case1")
         .output()
         .expect("can't run shelly");
 

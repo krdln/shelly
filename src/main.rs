@@ -6,7 +6,7 @@ use failure::Error;
 extern crate yansi;
 use yansi::{Color, Paint};
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use shelly::{Line, EmittedItem, lint::{Lint, self}};
 
@@ -18,8 +18,8 @@ use structopt::StructOpt;
 #[derive(StructOpt, Debug)]
 struct Opt {
     /// Directory with code to analyze
-    #[structopt(long = "directory", default_value = ".")]
-    directory: String,
+    #[structopt(long = "directory", default_value = ".", parse(from_os_str))]
+    directory: PathBuf,
 
     #[structopt(subcommand)]
     cmd: Option<Subcommand>,
@@ -45,7 +45,7 @@ fn run() -> Result<(), Error> {
 
     match opt.cmd {
         Some(Subcommand::ShowLints) => {
-            print_lints();
+            print_lints(&opt.directory);
         }
         None => {
             shelly::run(opt.directory, &mut CliEmitter {})?
@@ -69,11 +69,25 @@ fn main() {
     }
 }
 
-fn print_lints() {
+fn print_lints(dir: &Path) {
+    let config = match shelly::load_config_from_dir(&dir) {
+        Ok(config) => config,
+        Err(err)   => {
+            println!("Note: couldn't parse shelly config ({})\n", err);
+            lint::Config::default()
+        }
+    };
+
     println!("Available lints:");
-    let config = lint::Config::default();
+
     for lint in Lint::lints() {
-        println!("{}: {:?}", lint.slug(), lint.level(&config));
+        let level = lint.level(&config);
+        let note = if level != lint.default_level() {
+            format!(" (overriden from default {:?})", lint.default_level())
+        } else {
+            String::new()
+        };
+        println!("{:>30}: {:?}{}", lint.slug(), level, note);
     }
 }
 

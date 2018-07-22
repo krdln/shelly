@@ -20,6 +20,7 @@ use failure::ResultExt;
 
 use std::collections::BTreeMap as Map;
 use std::path::{Path, PathBuf};
+use std::fs;
 
 use lint::Lint;
 
@@ -30,7 +31,9 @@ pub fn run(root_path: impl AsRef<Path>, emitter: &mut Emitter) -> Result<(), Err
 fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
     use preprocess::PreprocessOutput;
 
-    let mut emitter = lint::Emitter::new(raw_emitter, lint::Config::default());
+    let lint_config = load_config_from_dir(root_path).context("Loading shelly config")?;
+
+    let mut emitter = lint::Emitter::new(raw_emitter, lint_config);
 
     let mut files = Map::new();
 
@@ -69,6 +72,17 @@ fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
     testnames::analyze(&files, &mut emitter);
 
     Ok(())
+}
+
+pub fn load_config_from_dir(dir_path: &Path) -> Result<lint::Config, Error> {
+    for &filename in &["shelly.toml", "Shelly.toml"] {
+        let config_path = dir_path.join(filename);
+        if config_path.exists() {
+            let config_str = fs::read_to_string(config_path)?;
+            return Ok(config_str.parse()?);
+        }
+    }
+    Ok(lint::Config::default())
 }
 
 /// Kind of error message
