@@ -4,6 +4,7 @@ extern crate walkdir;
 extern crate failure;
 #[macro_use]
 extern crate lazy_static;
+extern crate toml;
 
 pub mod lint;
 mod syntax;

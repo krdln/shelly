@@ -3,6 +3,8 @@ use std::collections::BTreeSet as Set;
 use std::str::FromStr;
 
 use regex::Regex;
+use toml;
+use failure;
 
 use EmittedItem;
 use Location;
@@ -13,6 +15,22 @@ pub enum Level {
     Allow,
     Warn,
     Deny,
+}
+
+#[derive(Debug)]
+pub struct UnknownLevel;
+
+impl FromStr for Level {
+    type Err = UnknownLevel;
+
+    fn from_str(s: &str) -> Result<Level, Self::Err> {
+        match s {
+            "Allow" | "allow" => Ok(Level::Allow),
+            "Warn"  | "warn"  => Ok(Level::Warn),
+            "Deny"  | "deny"  => Ok(Level::Deny),
+            _       => Err(UnknownLevel),
+        }
+    }
 }
 
 macro_rules! lints {
@@ -159,20 +177,62 @@ impl Default for Config {
     }
 }
 
-#[derive(Debug)]
-pub struct ConfigParseError;
+pub type ConfigParseError = failure::Error;
 
 impl FromStr for Config {
     type Err = ConfigParseError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        unimplemented!()
+    fn from_str(source: &str) -> Result<Self, Self::Err> {
+        // Perhaps this parsing could be implemented
+        // magically by a macro?
+
+        let toml: toml::Value = source.parse()?;
+        let sections = match toml.as_table() {
+            Some(table) => table,
+            None        => bail!("Toml document was not a table"),
+        };
+
+        let mut levels = None;
+        for (name, contents) in sections {
+            match name.as_str() {
+                "levels" => levels = Some(contents),
+                unknown_section => bail!(
+                    "Unknown section '{}'. \
+                    Note: lint levels should be in [levels] section",
+                    unknown_section
+                ),
+            }
+        }
+
+        let mut config = Config::default();
+        if let Some(levels) = levels {
+            let levels = match levels.as_table() {
+                Some(table) => table,
+                None        => bail!("Levels section was not a table"),
+            };
+
+            for (lint_name, level) in levels {
+                let lint = match lint_name.parse() {
+                    Ok(lint) => lint,
+                    Err(_)   => bail!("Unknown lint name: '{}'", lint_name),
+                };
+                let level = match level.as_str().map(str::parse) {
+                    Some(Ok(level)) => level,
+                    _               => bail!("Unknown level '{}' for '{}'", level, lint_name),
+                };
+                let previous_entry = config.overrides.insert(lint, level);
+                if previous_entry.is_some() {
+                    bail!("Duplicated entry for '{}' lint", lint_name);
+                }
+            }
+        }
+
+        Ok(config)
     }
 
 }
 
 #[test]
-#[ignore] // Pending
 fn config_from_string() {
     let cfg_string = r#"
 [levels]
