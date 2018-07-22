@@ -3,9 +3,9 @@ use failure::Error;
 use std::path::{Path, PathBuf};
 use std::fs;
 
+use lint::Lint;
+use lint::Emitter;
 use syntax;
-use Emitter;
-use Message;
 
 /// Parsed and preprocessed source file
 #[derive(Debug, Default)]
@@ -13,6 +13,7 @@ pub struct Parsed {
     pub imports: Vec<PathBuf>,
     pub definitions: Vec<syntax::Definition>,
     pub usages: Vec<syntax::Usage>,
+    pub testcases: Vec<syntax::Testcase>,
 
     /// Original, non-resolved path, relative to PWD. Used for error reporting.
     pub original_path: PathBuf,
@@ -32,45 +33,16 @@ pub fn parse_and_preprocess(path: &Path, emitter: &mut Emitter) -> Result<Prepro
     let source = fs::read_to_string(path)?;
     let file = syntax::parse(&source);
 
-    for testcase in file.testcases {
-        let invalid_chars: &[char] = &['"', '>', '<', '|', ':', '*', '?', '\\', '/'];
-
-        if file.uses_pester_logger && testcase.name.contains(invalid_chars) {
-            emitter.emit(
-                Message::Warning,
-                "Testname contains invalid characters".to_owned(),
-                testcase.location.in_file(path),
-                Some(format!(
-                    "These characters are invalid in a file name: {:?}",
-                    invalid_chars,
-                )),
-            );
-        }
-    }
-
     let resolved_imports = match resolve_imports(path, file.imports, emitter)? {
         Some(imports) => imports,
         None => return Ok(PreprocessOutput::InvalidImports),
     };
 
-    let mut definitions = file.definitions;
-    // We treat setting strict mode as defining
-    // a "!EnablesStrictMode" pseudo-item.
-    // TODO make Definition a proper enum to support this case.
-    for usage in &file.usages {
-        if usage.name == "Set-StrictMode" {
-            definitions.push(::syntax::Definition {
-                name: ::strictness::STRICT_MODE_PSEUDOITEM_NAME.into(),
-                location: usage.location.clone()
-            });
-            break;
-        }
-    }
-
     Ok(PreprocessOutput::Valid(Parsed {
         imports: resolved_imports,
-        definitions: definitions,
+        definitions: file.definitions,
         usages: file.usages,
+        testcases: file.testcases,
         original_path: path.to_owned(),
     }))
 }
@@ -100,15 +72,10 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
                 // "Not in scope" errors later on.
                 // import_error = true;
 
-                emitter.emit(
-                    Message::Warning,
-                    "Unrecognized import statement".to_string(),
-                    import.location.in_file(source_path),
-                    Some(
-                        "Note: Recognized imports are `$PSScriptRoot\\..` or `$here\\$sut`"
-                            .to_string(),
-                    ),
-                );
+                import.location.in_file(source_path)
+                    .lint(Lint::UnrecognizedImports, "Unrecognized import statement")
+                    .note("Note: Recognized imports are `$PSScriptRoot\\..` or `$here\\$sut`")
+                    .emit(emitter);
 
                 continue;
             }
@@ -119,15 +86,10 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
         } else {
             import_error = true;
 
-            emitter.emit(
-                Message::Error,
-                "Invalid import".to_string(),
-                import.location.in_file(source_path),
-                Some(format!(
-                    "File not found: {}",
-                    dest_path.display()
-                )),
-            );
+            import.location.in_file(source_path)
+                .lint(Lint::NonexistingImports, "Invalid import")
+                .note(format!("File not found: {}", dest_path.display()))
+                .emit(emitter);
         }
     }
 

@@ -4,10 +4,9 @@ use std::collections::BTreeMap as Map;
 use std::collections::BTreeSet as Set;
 use std::path::{Path, PathBuf};
 
-use Emitter;
-use Message;
+use lint::Emitter;
+use lint::Lint;
 use preprocess::Parsed;
-use is_allowed;
 
 /// Functions in scope
 #[derive(Debug, Clone, Default)]
@@ -79,9 +78,6 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, emitter: &mut Emitter)
             if BUILTINS.contains(usage.name.as_str()) {
                 continue;
             }
-            if is_allowed(&usage.location.line, &usage.name) {
-                continue;
-            }
             if already_analyzed.contains(usage.name.as_str()) {
                 continue;
             }
@@ -89,18 +85,18 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, emitter: &mut Emitter)
             already_analyzed.insert(usage.name.as_str());
 
             match scope.search(&usage.name) {
-                None => emitter.emit(
-                    Message::Error,
-                    format!("Not in scope: {}", usage.name),
-                    usage.location.in_file(&parsed.original_path),
-                    None,
-                ),
-                Some(Found::Indirect) => emitter.emit(
-                    Message::Warning,
-                    format!("Indirectly imported: {}", usage.name),
-                    usage.location.in_file(&parsed.original_path),
-                    None,
-                ),
+                None => {
+                    usage.location.in_file(&parsed.original_path)
+                        .lint(Lint::UnknownFunctions, format!("Not in scope: {}", usage.name))
+                        .what(usage.name.clone())
+                        .emit(emitter);
+                }
+                Some(Found::Indirect) => {
+                    usage.location.in_file(&parsed.original_path)
+                        .lint(Lint::IndirectImports, format!("Indirectly imported: {}", usage.name))
+                        .what(usage.name.clone())
+                        .emit(emitter);
+                }
                 _ => (),
             }
         }
@@ -165,6 +161,8 @@ fn get_scope<'a>(
 mod test {
     use syntax::{Line, Definition, Usage};
     use VecEmitter;
+    use MessageKind;
+    use lint::Config;
     use super::*;
 
     fn usage(fun: &str) -> Usage {
@@ -188,22 +186,22 @@ mod test {
                 "A".into(),
                 Parsed {
                     imports: vec!["B".into()],
-                    usages: vec![usage("A1"), usage("B1")],
-                    definitions: vec![definition("A1")],
+                    usages: vec![usage("funA1"), usage("funB1")],
+                    definitions: vec![definition("funA1")],
                     ..Parsed::default()
                 }
             ),
             (
                 "B".into(),
                 Parsed {
-                    definitions: vec![definition("B1")],
+                    definitions: vec![definition("funB1")],
                     ..Parsed::default()
                 }
             ),
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
-        analyze(&files, &mut emitter).unwrap();
+        analyze(&files, &mut Emitter::new(&mut emitter, Config::default())).unwrap();
 
         assert!(emitter.emitted_items.is_empty());
     }
@@ -216,43 +214,45 @@ mod test {
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
-        let res = analyze(&files, &mut emitter);
+        let res = analyze(&files, &mut Emitter::new(&mut emitter, Config::default()));
 
         assert!(res.is_err());
     }
 
     #[test]
-    fn test_error() {
+    fn test_errors_when_function_is_used_but_not_defined_anywhere() {
         let files = vec![
-            ("A".into(), Parsed { usages: vec![usage("Foo")], ..Parsed::default() }),
+            ("A".into(), Parsed { usages: vec![usage("fun")], ..Parsed::default() }),
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
-        analyze(&files, &mut emitter).unwrap();
+        analyze(&files, &mut Emitter::new(&mut emitter, Config::default())).unwrap();
 
         assert_eq!(emitter.emitted_items.len(), 1);
-        assert_eq!(emitter.emitted_items[0].kind, Message::Error);
+        assert_eq!(emitter.emitted_items[0].kind, MessageKind::Error);
+        assert_eq!(emitter.emitted_items[0].lint, Lint::UnknownFunctions);
     }
 
     #[test]
-    fn test_indirect_warning() {
+    fn test_warns_when_function_is_defined_not_directly_in_imported_file_but_deeper() {
         let files = vec![
             (
                 "A".into(),
                 Parsed {
-                    usages: vec![usage("C1")],
+                    usages: vec![usage("funC1")],
                     imports: vec!["B".into()],
                     ..Parsed::default()
                 }
             ),
             ("B".into(), Parsed { imports: vec!["C".into()], ..Parsed::default() }),
-            ("C".into(), Parsed { definitions: vec![definition("C1")], ..Parsed::default() }),
+            ("C".into(), Parsed { definitions: vec![definition("funC1")], ..Parsed::default() }),
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
-        analyze(&files, &mut emitter).unwrap();
+        analyze(&files, &mut Emitter::new(&mut emitter, Config::default())).unwrap();
 
         assert_eq!(emitter.emitted_items.len(), 1);
-        assert_eq!(emitter.emitted_items[0].kind, Message::Warning);
+        assert_eq!(emitter.emitted_items[0].kind, MessageKind::Warning);
+        assert_eq!(emitter.emitted_items[0].lint, Lint::IndirectImports);
     }
 }

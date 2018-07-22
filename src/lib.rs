@@ -4,11 +4,14 @@ extern crate walkdir;
 extern crate failure;
 #[macro_use]
 extern crate lazy_static;
+extern crate toml;
 
+pub mod lint;
 mod syntax;
 mod preprocess;
 mod scope;
 mod strictness;
+mod testnames;
 
 use walkdir::WalkDir;
 
@@ -17,13 +20,20 @@ use failure::ResultExt;
 
 use std::collections::BTreeMap as Map;
 use std::path::{Path, PathBuf};
+use std::fs;
+
+use lint::Lint;
 
 pub fn run(root_path: impl AsRef<Path>, emitter: &mut Emitter) -> Result<(), Error> {
     run_(root_path.as_ref(), emitter)
 }
 
-fn run_(root_path: &Path, emitter: &mut Emitter) -> Result<(), Error> {
+fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
     use preprocess::PreprocessOutput;
+
+    let lint_config = load_config_from_dir(root_path).context("Loading shelly config")?;
+
+    let mut emitter = lint::Emitter::new(raw_emitter, lint_config);
 
     let mut files = Map::new();
 
@@ -39,9 +49,12 @@ fn run_(root_path: &Path, emitter: &mut Emitter) -> Result<(), Error> {
             continue;
         }
 
-        match preprocess::parse_and_preprocess(entry.path(), emitter)? {
-            PreprocessOutput::Valid(parsed) => {
+        match preprocess::parse_and_preprocess(entry.path(), &mut emitter)? {
+            PreprocessOutput::Valid(mut parsed) => {
                 let path = entry.path().canonicalize()?;
+
+                strictness::preprocess(&mut parsed);
+
                 files.insert(path, parsed);
             }
             PreprocessOutput::InvalidImports => {
@@ -53,42 +66,40 @@ fn run_(root_path: &Path, emitter: &mut Emitter) -> Result<(), Error> {
         };
     }
 
-    let scopes = scope::analyze(&files, emitter).context("analyzing")?;
+    let scopes = scope::analyze(&files, &mut emitter).context("analyzing")?;
 
-    strictness::analyze(&files, &scopes, emitter);
+    strictness::analyze(&files, &scopes, &mut emitter);
+    testnames::analyze(&files, &mut emitter);
 
     Ok(())
 }
 
-fn is_allowed(line: &str, what: &str) -> bool {
-    let mut chunks = line.splitn(2, "#");
-
-    match chunks.next() {
-        Some(_before_comment) => (),
-        None => return false,
+pub fn load_config_from_dir(dir_path: &Path) -> Result<lint::Config, Error> {
+    for &filename in &["shelly.toml", "Shelly.toml"] {
+        let config_path = dir_path.join(filename);
+        if config_path.exists() {
+            let config_str = fs::read_to_string(config_path)?;
+            return Ok(config_str.parse()?);
+        }
     }
-
-    match chunks.next() {
-        Some(comment) => comment.to_lowercase().contains("allow") && comment.contains(what),
-        None => false,
-    }
+    Ok(lint::Config::default())
 }
 
 /// Kind of error message
 #[derive(Debug, Eq, PartialEq)]
-pub enum Message {
-    Error,
+pub enum MessageKind {
     Warning,
+    Error,
 }
 
-impl Default for Message {
-    fn default() -> Message { Message::Error }
+impl Default for MessageKind {
+    fn default() -> MessageKind { MessageKind::Error }
 }
 
 pub use syntax::Line;
 
 /// Location of a message
-#[derive(Default, Debug)]
+#[derive(Debug, Clone)]
 pub struct Location {
     pub file: PathBuf,
     pub line: Option<Line>,
@@ -113,18 +124,13 @@ impl Line {
 }
 
 pub trait Emitter {
-    fn emit(
-        &mut self,
-        kind: Message,
-        message: String,
-        location: Location,
-        notes: Option<String>,
-    );
+    fn emit(&mut self, item: EmittedItem);
 }
 
-#[derive(Default)]
+#[derive(Debug)]
 pub struct EmittedItem {
-    pub kind: Message,
+    pub lint: Lint,
+    pub kind: MessageKind,
     pub message: String,
     pub location: Location,
     pub notes: Option<String>,
@@ -141,14 +147,7 @@ impl VecEmitter {
 }
 
 impl Emitter for VecEmitter {
-    fn emit(
-        &mut self,
-        kind: Message,
-        message: String,
-        location: Location,
-        notes: Option<String>,
-    ) {
-        let to_emit = EmittedItem { kind, message, location, notes };
+    fn emit(&mut self, to_emit: EmittedItem) {
         self.emitted_items.push(to_emit)
     }
 }

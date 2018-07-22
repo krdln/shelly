@@ -6,9 +6,54 @@ use failure::Error;
 extern crate yansi;
 use yansi::{Color, Paint};
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use shelly::{Line, Location};
+use shelly::{Line, EmittedItem, lint::{Lint, self}};
+
+#[macro_use]
+extern crate structopt;
+
+use structopt::StructOpt;
+
+#[derive(StructOpt, Debug)]
+struct Opt {
+    /// Directory with code to analyze
+    #[structopt(long = "directory", default_value = ".", parse(from_os_str))]
+    directory: PathBuf,
+
+    #[structopt(subcommand)]
+    cmd: Option<Subcommand>,
+}
+
+#[derive(StructOpt, Debug)]
+enum Subcommand {
+    /// Show available lints
+    #[structopt(name = "show-lints")]
+    ShowLints,
+}
+
+fn run() -> Result<(), Error> {
+    if cfg!(windows) && !Paint::enable_windows_ascii() {
+        Paint::disable();
+    }
+
+    let opt = Opt::from_args();
+
+    if !Path::new(".git").exists() {
+        eprintln!("warning: not a root of a repository");
+    }
+
+    match opt.cmd {
+        Some(Subcommand::ShowLints) => {
+            print_lints(&opt.directory);
+        }
+        None => {
+            shelly::run(opt.directory, &mut CliEmitter {})?
+        }
+    }
+
+    Ok(())
+}
 
 fn main() {
     // Main is a thin wrapper around `run` designed to
@@ -24,31 +69,35 @@ fn main() {
     }
 }
 
-fn run() -> Result<(), Error> {
-    if cfg!(windows) && !Paint::enable_windows_ascii() {
-        Paint::disable();
-    }
+fn print_lints(dir: &Path) {
+    let config = match shelly::load_config_from_dir(&dir) {
+        Ok(config) => config,
+        Err(err)   => {
+            println!("Note: couldn't parse shelly config ({})\n", err);
+            lint::Config::default()
+        }
+    };
 
-    if !Path::new(".git").exists() {
-        eprintln!("warning: not a root of a repository");
-    }
+    println!("Available lints:");
 
-    shelly::run(".", &mut CliEmitter {})
+    for lint in Lint::lints() {
+        let level = lint.level(&config);
+        let note = if level != lint.default_level() {
+            format!(" (overriden from default {:?})", lint.default_level())
+        } else {
+            String::new()
+        };
+        println!("{:>30}: {:?}{}", lint.slug(), level, note);
+    }
 }
 
 struct CliEmitter {}
 
 impl shelly::Emitter for CliEmitter {
-    fn emit(
-        &mut self,
-        kind: shelly::Message,
-        message: String,
-        location: Location,
-        notes: Option<String>,
-    ) {
+    fn emit(&mut self, item: EmittedItem) {
         // Style of error message inspired by Rust
 
-        let line_no = location.line
+        let line_no = item.location.line
             .as_ref()
             .map_or_else(
                 || " ".to_string(),
@@ -64,28 +113,28 @@ impl shelly::Emitter for CliEmitter {
         let blue = Color::Blue.style().bold();
         let pipe = blue.paint("|");
 
-        match kind {
-            shelly::Message::Error => {
-                println!("{}: {}", Color::Red.style().bold().paint("error"), message)
+        match item.kind {
+            shelly::MessageKind::Error => {
+                println!("{}: {}", Color::Red.style().bold().paint("error"), item.message)
             }
-            shelly::Message::Warning => println!(
+            shelly::MessageKind::Warning => println!(
                 "{}: {}",
                 Color::Yellow.style().bold().paint("warning"),
-                message
+                item.message
             ),
         }
 
         offset();
-        println!("{} {}", blue.paint("-->"), location.file.display());
+        println!("{} {}", blue.paint("-->"), item.location.file.display());
 
-        if let Some(Line { line, .. }) = location.line {
+        if let Some(Line { line, .. }) = item.location.line {
             offset();
             println!(" {}", pipe);
 
             println!("{} {} {}", blue.paint(&line_no), pipe, line);
         }
 
-        if let Some(notes) = notes {
+        if let Some(notes) = item.notes {
             offset();
             println!(" {}", pipe);
 

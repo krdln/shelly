@@ -1,0 +1,4 @@
+[levels]
+unrecognized-imports = "deny"
+unknown-functions = "deny"
+no-strict-mode = "allow"

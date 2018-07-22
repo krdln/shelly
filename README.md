@@ -35,10 +35,12 @@ Note: An error in earlier stage of analysis may cause consecutive stages not to 
 
 ### Silencing errors
 
-To silence the error, add a comment with `Allow <function>`, eg:
+To silence the error, add a comment with `allow lint-name`, eg:
 
 ```powershell
 # This function is injected into scope in some weird way,
 # not with regular imports.
-Magic-Function # Allow Magic-Function
+Magic-Function # allow unknown-functions
+# or to be more specific:
+Magic-Function # allow unknown-functions(Magic-Function)
 ```
