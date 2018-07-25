@@ -20,7 +20,7 @@ pub struct ConfigFile {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ConfigFileExtras {
+pub(crate) struct ConfigFileExtras {
     pub(crate) cmdlets: Option<Vec<String>>,
 }
 
