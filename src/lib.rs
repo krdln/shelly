@@ -5,8 +5,11 @@ extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 extern crate toml;
+#[macro_use]
+extern crate serde_derive;
 
 pub mod lint;
+mod config;
 mod syntax;
 mod preprocess;
 mod scope;
@@ -24,6 +27,8 @@ use std::fs;
 
 use lint::Lint;
 
+pub use config::ConfigFile;
+
 pub fn run(root_path: impl AsRef<Path>, emitter: &mut Emitter) -> Result<(), Error> {
     run_(root_path.as_ref(), emitter)
 }
@@ -31,7 +36,8 @@ pub fn run(root_path: impl AsRef<Path>, emitter: &mut Emitter) -> Result<(), Err
 fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
     use preprocess::PreprocessOutput;
 
-    let lint_config = load_config_from_dir(root_path).context("Loading shelly config")?;
+    let config = load_config_from_dir(root_path).context("Loading shelly config")?;
+    let lint_config = lint::Config::from_config_file(&config).context("Loading lint levels config")?;
 
     let mut emitter = lint::Emitter::new(raw_emitter, lint_config);
 
@@ -74,7 +80,7 @@ fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn load_config_from_dir(dir_path: &Path) -> Result<lint::Config, Error> {
+pub fn load_config_from_dir(dir_path: &Path) -> Result<ConfigFile, Error> {
     for &filename in &["shelly.toml", "Shelly.toml"] {
         let config_path = dir_path.join(filename);
         if config_path.exists() {
@@ -82,7 +88,7 @@ pub fn load_config_from_dir(dir_path: &Path) -> Result<lint::Config, Error> {
             return Ok(config_str.parse()?);
         }
     }
-    Ok(lint::Config::default())
+    Ok(ConfigFile::default())
 }
 
 /// Kind of error message

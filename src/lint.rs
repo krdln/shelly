@@ -3,12 +3,12 @@ use std::collections::BTreeSet as Set;
 use std::str::FromStr;
 
 use regex::Regex;
-use toml;
 use failure;
 
 use EmittedItem;
 use Location;
 use MessageKind;
+use ConfigFile;
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone)]
 pub enum Level {
@@ -177,51 +177,23 @@ impl Default for Config {
     }
 }
 
-pub type ConfigParseError = failure::Error;
-
-impl FromStr for Config {
-    type Err = ConfigParseError;
-
-    fn from_str(source: &str) -> Result<Self, Self::Err> {
-        // Perhaps this parsing could be implemented
-        // magically by a macro?
-
-        let toml: toml::Value = source.parse()?;
-        let sections = match toml.as_table() {
-            Some(table) => table,
-            None        => bail!("Toml document was not a table"),
-        };
-
-        let mut levels = None;
-        for (name, contents) in sections {
-            match name.as_str() {
-                "levels" => levels = Some(contents),
-                unknown_section => bail!(
-                    "Unknown section '{}'. \
-                    Note: lint levels should be in [levels] section",
-                    unknown_section
-                ),
-            }
-        }
-
+impl Config {
+    pub fn from_config_file(config_file: &ConfigFile) -> Result<Config, failure::Error> {
         let mut config = Config::default();
-        if let Some(levels) = levels {
-            let levels = match levels.as_table() {
-                Some(table) => table,
-                None        => bail!("Levels section was not a table"),
-            };
 
+        if let Some(levels) = &config_file.levels {
             for (lint_name, level) in levels {
-                let lint = match lint_name.parse() {
-                    Ok(lint) => lint,
-                    Err(_)   => bail!("Unknown lint name: '{}'", lint_name),
-                };
-                let level = match level.as_str().map(str::parse) {
-                    Some(Ok(level)) => level,
-                    _               => bail!("Unknown level '{}' for '{}'", level, lint_name),
-                };
+                let lint = lint_name.parse()
+                    .map_err(|_| format_err!("Unknown lint name: '{}'", lint_name))?;
+
+                let level = level.parse()
+                    .map_err(|_| format_err!("Unknown level '{}' for '{}'", level, lint_name))?;
+
                 let previous_entry = config.overrides.insert(lint, level);
                 if previous_entry.is_some() {
+                    // Toml parsing gets rid of duplicates for us,
+                    // but if we introduce lint-name-aliases, duplicates
+                    // may occur.
                     bail!("Duplicated entry for '{}' lint", lint_name);
                 }
             }
@@ -229,7 +201,6 @@ impl FromStr for Config {
 
         Ok(config)
     }
-
 }
 
 #[test]
@@ -238,7 +209,8 @@ fn config_from_string() {
 [levels]
 nonexisting-imports = "warn"
 "#;
-    let config = Config::from_str(cfg_string).unwrap();
+    let config = ConfigFile::from_str(cfg_string).unwrap();
+    let config = Config::from_config_file(&config).unwrap();
     assert_eq!(config.overrides[&Lint::NonexistingImports], Level::Warn);
 }
 

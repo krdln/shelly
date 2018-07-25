@@ -70,7 +70,10 @@ fn main() {
 }
 
 fn print_lints(dir: &Path) {
-    let config = match shelly::load_config_from_dir(&dir) {
+    let maybe_config = shelly::load_config_from_dir(&dir)
+        .and_then(|config| shelly::lint::Config::from_config_file(&config));
+
+    let config = match maybe_config {
         Ok(config) => config,
         Err(err)   => {
             println!("Note: couldn't parse shelly config ({})\n", err);
