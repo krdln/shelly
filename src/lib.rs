@@ -72,7 +72,7 @@ fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
         };
     }
 
-    let scopes = scope::analyze(&files, &mut emitter).context("analyzing")?;
+    let scopes = scope::analyze(&files, &config, &mut emitter).context("analyzing")?;
 
     strictness::analyze(&files, &scopes, &mut emitter);
     testnames::analyze(&files, &mut emitter);

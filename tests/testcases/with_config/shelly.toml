@@ -2,3 +2,8 @@
 unrecognized-imports = "deny"
 unknown-functions = "deny"
 no-strict-mode = "allow"
+
+[extras]
+cmdlets = [
+    "New-Frobnicator",
+]

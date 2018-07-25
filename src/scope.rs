@@ -7,6 +7,23 @@ use std::path::{Path, PathBuf};
 use lint::Emitter;
 use lint::Lint;
 use preprocess::Parsed;
+use ConfigFile;
+
+struct Config {
+    custom_cmdlets: Set<String>,
+}
+
+impl Config {
+    fn from_config_file(config_file: &ConfigFile) -> Config {
+        let custom_cmdlets = config_file.extras
+            .as_ref()
+            .and_then(|extras| extras.cmdlets.as_ref())
+            .map(|cmdlets| cmdlets.iter().cloned().collect())
+            .unwrap_or_else(Set::new);
+
+        Config { custom_cmdlets }
+    }
+}
 
 /// Functions in scope
 #[derive(Debug, Clone, Default)]
@@ -55,7 +72,7 @@ enum ScopeWip<'a> {
     Current,
 }
 
-pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, emitter: &mut Emitter)
+pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter: &mut Emitter)
     -> Result<Map<&'a Path, Scope<'a>>, Error>
 {
     lazy_static! {
@@ -64,6 +81,8 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, emitter: &mut Emitter)
             .chain(include_str!("extras.txt").split_whitespace())
             .collect();
     }
+
+    let config = Config::from_config_file(config);
 
     let mut scopes = Map::new();
 
@@ -76,6 +95,9 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, emitter: &mut Emitter)
 
         for usage in &parsed.usages {
             if BUILTINS.contains(usage.name.as_str()) {
+                continue;
+            }
+            if config.custom_cmdlets.contains(&usage.name) {
                 continue;
             }
             if already_analyzed.contains(usage.name.as_str()) {
@@ -162,7 +184,7 @@ mod test {
     use syntax::{Line, Definition, Usage};
     use VecEmitter;
     use MessageKind;
-    use lint::Config;
+    use lint;
     use super::*;
 
     fn usage(fun: &str) -> Usage {
@@ -201,7 +223,11 @@ mod test {
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
-        analyze(&files, &mut Emitter::new(&mut emitter, Config::default())).unwrap();
+        analyze(
+            &files,
+            &ConfigFile::default(),
+            &mut Emitter::new(&mut emitter, lint::Config::default())
+        ).unwrap();
 
         assert!(emitter.emitted_items.is_empty());
     }
@@ -214,7 +240,11 @@ mod test {
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
-        let res = analyze(&files, &mut Emitter::new(&mut emitter, Config::default()));
+        let res = analyze(
+            &files,
+            &ConfigFile::default(),
+            &mut Emitter::new(&mut emitter, lint::Config::default())
+        );
 
         assert!(res.is_err());
     }
@@ -226,7 +256,11 @@ mod test {
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
-        analyze(&files, &mut Emitter::new(&mut emitter, Config::default())).unwrap();
+        analyze(
+            &files,
+            &ConfigFile::default(),
+            &mut Emitter::new(&mut emitter, lint::Config::default())
+        ).unwrap();
 
         assert_eq!(emitter.emitted_items.len(), 1);
         assert_eq!(emitter.emitted_items[0].kind, MessageKind::Error);
@@ -249,7 +283,11 @@ mod test {
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
-        analyze(&files, &mut Emitter::new(&mut emitter, Config::default())).unwrap();
+        analyze(
+            &files,
+            &ConfigFile::default(),
+            &mut Emitter::new(&mut emitter, lint::Config::default())
+        ).unwrap();
 
         assert_eq!(emitter.emitted_items.len(), 1);
         assert_eq!(emitter.emitted_items[0].kind, MessageKind::Warning);
