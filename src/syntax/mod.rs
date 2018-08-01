@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use regex::Regex;
 
+mod v2;
+
 /// Parsed source file
 #[derive(Debug)]
 pub struct File {
