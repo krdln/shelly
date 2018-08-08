@@ -17,19 +17,23 @@ pub fn parse(source: &str) -> Result<TokenStream> {
 #[derive(Debug)]
 pub enum TokenTree {
     /// [a-z_][a-z0-9_]+
-    Word(Word),
+    Word { span: Span, spacing: Spacing },
 
     /// A newline or any non-whitespace symbol
-    Symbol(Symbol),
+    Symbol { span: Span, symbol: char, spacing: Spacing },
 
     /// Integer literal (TODO what about floats?)
-    Number(NumberLiteral),
+    ///
+    /// We're not interested in actual value for now
+    Number { span: Span },
 
     /// String literal (can contain nested expressions)
-    String(StringLiteral),
+    ///
+    /// `subtrees` contains $-variables and `$()` or `${}` interpolations.
+    String { span: Span, subtrees: TokenStream},
 
     /// A nested TokenStream delimited by a set of parens ( () [] {} )
-    Group(Group),
+    Group { span: Span, interior: TokenStream, delimiter: Delimiter },
 }
 
 use self::TokenTree as TT;
@@ -43,47 +47,11 @@ pub enum Spacing {
     Joined,
 }
 
-#[derive(Debug)]
-pub struct Word {
-    spacing: Spacing,
-    span: Span,
-}
-
-#[derive(Debug)]
-pub struct Symbol {
-    symbol: char,
-    spacing: Spacing,
-    span: Span,
-}
-
-#[derive(Debug)]
-pub struct NumberLiteral {
-    // we're not interested in actual value for now
-    span: Span,
-}
-
-#[derive(Debug)]
-pub struct StringLiteral {
-    // we're not interested in actual value for now
-    /// Variables and other magic injections
-    subtrees: TokenStream,
-
-    span: Span,
-}
-
 #[derive(Debug, Copy, Clone)]
 pub enum Delimiter {
     Parenthesis,
     Brace,
     Bracket,
-}
-
-#[derive(Debug)]
-pub struct Group {
-    interior: TokenStream,
-    delimiter: Delimiter,
-
-    span: Span,
 }
 
 impl Delimiter {
@@ -108,11 +76,11 @@ impl Delimiter {
 impl TokenTree {
     pub fn span(&self) -> Span {
         match *self {
-            | TT::Word(Word { span, .. })
-            | TT::Symbol(Symbol { span, .. })
-            | TT::Number(NumberLiteral { span, .. })
-            | TT::String(StringLiteral { span, .. })
-            | TT::Group(Group { span, .. })
+            | TT::Word { span, .. }
+            | TT::Symbol { span, .. }
+            | TT::Number { span, .. }
+            | TT::String { span, .. }
+            | TT::Group { span, .. }
             => span
         }
     }
@@ -163,16 +131,16 @@ impl<'syntax> Parser<'syntax> {
             };
 
             let tt = match c {
-                '(' | '{' | '['        => TT::Group(self.parse_group()?),
+                '(' | '{' | '['        => self.parse_group()?,
                 ')' | '}' | ']'        => return Ok(None),
-                '\n'                   => TT::Symbol(self.parse_symbol()),
+                '\n'                   => self.parse_symbol(),
                 '#'                    => { self.skip_to_newline(); continue }
                 '@'                    => self.parse_at()?,
-                '\'' | '\"'            => TT::String(self.parse_string(None)?),
-                w if can_start_word(w) => TT::Word(self.parse_word()),
-                n if n.is_numeric()    => TT::Number(self.parse_number()),
+                '\'' | '\"'            => self.parse_string(None)?,
+                w if can_start_word(w) => self.parse_word(),
+                n if n.is_numeric()    => self.parse_number(),
                 s if s.is_whitespace() => { self.consume_char(); continue }
-                _                      => TT::Symbol(self.parse_symbol()),
+                _                      => self.parse_symbol(),
             };
 
             return Ok(Some(tt))
@@ -180,7 +148,7 @@ impl<'syntax> Parser<'syntax> {
     }
 
     // Assuming first char is correct.
-    fn parse_word(&mut self) -> Word {
+    fn parse_word(&mut self) -> TokenTree {
         let start = self.current_location();
         self.consume_char();
 
@@ -190,30 +158,30 @@ impl<'syntax> Parser<'syntax> {
 
         let end = self.current_location();
 
-        Word {
+        TT::Word {
             spacing: Spacing::Alone,
             span: Span { start, end },
         }
     }
 
-    fn parse_number(&mut self) -> NumberLiteral {
+    fn parse_number(&mut self) -> TokenTree {
         let start = self.current_location();
         while self.peek_char().map(char::is_numeric).unwrap_or(false) {
             self.consume_char();
         }
         let end = self.current_location();
 
-        NumberLiteral { span: Span { start, end } }
+        TT::Number { span: Span { start, end } }
     }
 
     // Assuming it's a symbol
-    fn parse_symbol(&mut self) -> Symbol {
+    fn parse_symbol(&mut self) -> TokenTree {
         let (symbol, span) = self.consume_char().unwrap();
-        Symbol { symbol, span, spacing: Spacing::Alone }
+        TT::Symbol { symbol, span, spacing: Spacing::Alone }
     }
 
     // Assuming first char is correct.
-    fn parse_group(&mut self) -> Result<Group> {
+    fn parse_group(&mut self) -> Result<TokenTree> {
         let (opening, sp_start) = self.consume_char().unwrap();
         let delimiter = Delimiter::from_opening(opening);
 
@@ -223,7 +191,7 @@ impl<'syntax> Parser<'syntax> {
 
         match self.consume_char() {
             Some((closing, sp_end)) if closing == expected => {
-                Ok(Group {
+                Ok(TT::Group {
                     interior: tts,
                     delimiter,
                     span: sp_start.to(sp_end),
@@ -253,14 +221,14 @@ impl<'syntax> Parser<'syntax> {
         assert!(symbol == '@');
 
         let tt = match self.peek_char() {
-            Some('\"') | Some('\'') => TT::String(self.parse_string(Some(consumed))?),
-            _                       => TT::Symbol(Symbol { symbol, span, spacing: Spacing::Alone }),
+            Some('\"') | Some('\'') => self.parse_string(Some(consumed))?,
+            _                       => TT::Symbol { symbol, span, spacing: Spacing::Alone },
         };
         Ok(tt)
     }
 
     // Assuming it's a string
-    fn parse_string(&mut self, preceding_symbol: Option<(char, Span)>) -> Result<StringLiteral> {
+    fn parse_string(&mut self, preceding_symbol: Option<(char, Span)>) -> Result<TokenTree> {
         use self::StringQuotes::*;
         use self::StringHereness::*;
 
@@ -301,8 +269,8 @@ impl<'syntax> Parser<'syntax> {
                 }
                 ('$',  Double, _)          => {
                     match self.peek_char() {
-                        Some('(') | Some('{')        => subtrees.push(TT::Group(self.parse_group()?)),
-                        Some(w) if can_start_word(w) => subtrees.push(TT::Word(self.parse_word())),
+                        Some('(') | Some('{')        => subtrees.push(self.parse_group()?),
+                        Some(w) if can_start_word(w) => subtrees.push(self.parse_word()),
                         _                            => (),
                     }
                 }
@@ -310,7 +278,7 @@ impl<'syntax> Parser<'syntax> {
             }
         }
 
-        Ok(StringLiteral {
+        Ok(TT::String {
             subtrees: subtrees.into_boxed_slice(),
             span: Span { start, end: self.current_location() },
         })
@@ -342,8 +310,8 @@ fn compute_spacing(tts: &mut[TokenTree]) {
 
     for tt in tts.iter_mut().rev().skip(1) {
         match tt {
-            | TT::Word(Word { spacing, span, .. })
-            | TT::Symbol(Symbol { spacing, span, .. })
+            | TT::Word { spacing, span, .. }
+            | TT::Symbol { spacing, span, .. }
             if span.end == right_start
             => *spacing = Spacing::Joined,
 
@@ -383,18 +351,18 @@ macro_rules! assert_parse_matches {
 fn words_nums_symbols() {
     use self::Spacing::*;
     assert_parse_matches!(
-        "word"       => TT::Word(_) => true
-        "nan"        => TT::Number(_) => false
-        "New-Item"   => TT::Word(_), TT::Symbol(_), TT::Word(_) => true
+        "word"       => TT::Word{..} => true
+        "nan"        => TT::Number{..} => false
+        "New-Item"   => TT::Word{..}, TT::Symbol{..}, TT::Word{..} => true
         "$foo-$bar"  =>
-            TT::Symbol(_), TT::Word(_), TT::Symbol(_),
-            TT::Symbol(_), TT::Word(_)
+            TT::Symbol{..}, TT::Word{..}, TT::Symbol{..},
+            TT::Symbol{..}, TT::Word{..}
             => true
         "foo `\nbar" =>
-            TT::Word(Word { spacing: Alone, .. }),
-            TT::Symbol(Symbol { symbol: '`', spacing: Joined, .. }),
-            TT::Symbol(Symbol { symbol: '\n', spacing: Joined, .. }),
-            TT::Word(Word { spacing: Alone, .. })
+            TT::Word { spacing: Alone, .. },
+            TT::Symbol { symbol: '`', spacing: Joined, .. },
+            TT::Symbol { symbol: '\n', spacing: Joined, .. },
+            TT::Word { spacing: Alone, .. }
             => true
     );
 }
@@ -402,24 +370,24 @@ fn words_nums_symbols() {
 #[test]
 fn strings() {
     assert_parse_matches!(
-        r#" "foo" "# => TT::String(_) => true
-        r#" 'foo' "# => TT::String(_) => true
-        r#" "foo'" "# => TT::String(_) => true
-        r#" "hello ""friend """ "# => TT::String(_) => true
-        r#" "`"" "# => TT::String(_) => true
-        r#" '`' "# => TT::String(_) => true
-        r#" " "# => TT::String(_) => false // unclosed
+        r#" "foo" "# => TT::String{..} => true
+        r#" 'foo' "# => TT::String{..} => true
+        r#" "foo'" "# => TT::String{..} => true
+        r#" "hello ""friend """ "# => TT::String{..} => true
+        r#" "`"" "# => TT::String{..} => true
+        r#" '`' "# => TT::String{..} => true
+        r#" " "# => TT::String{..} => false // unclosed
         r#" @'
 sialala `"'"'`$foo
 here: @'lol'@
-'@ "# => TT::String(_) => true
+'@ "# => TT::String{..} => true
     );
 }
 
 #[test]
 fn comments() {
     assert_parse_matches!(
-        "foo # nieprawda\nbar" => TT::Word(_), TT::Symbol(_), TT::Word(_) => true
-        "# komentarz\n" => TT::Symbol(Symbol { symbol: '\n', .. }) => true
+        "foo # nieprawda\nbar" => TT::Word{..}, TT::Symbol{..}, TT::Word{..} => true
+        "# komentarz\n" => TT::Symbol { symbol: '\n', .. } => true
     );
 }
