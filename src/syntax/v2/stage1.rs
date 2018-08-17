@@ -1,6 +1,7 @@
 use syntax::v2::{Span, Location};
 use syntax::v2::Muncher;
 use syntax::v2::Result;
+use syntax::v2::stream::Dummy;
 
 /// Parses a source file into list of token trees, stripping comments.
 pub fn parse(source: &str) -> Result<TokenStream> {
@@ -82,6 +83,17 @@ impl TokenTree {
             | TT::String { span, .. }
             | TT::Group { span, .. }
             => span
+        }
+    }
+}
+
+impl Dummy for TokenTree {
+    fn dummy() -> TokenTree {
+        TT::Number {
+            span: Span {
+                start: Location::start(),
+                end:   Location::start(),
+            },
         }
     }
 }

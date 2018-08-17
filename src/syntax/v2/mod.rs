@@ -21,6 +21,7 @@ use syntax::v2::muncher::Muncher;
 use syntax::v2::muncher::{Span, Location};
 
 mod stage1;
+mod stream;
 
 impl Location {
     fn error<T>(self, msg: impl Into<String>) -> Result<T> {
