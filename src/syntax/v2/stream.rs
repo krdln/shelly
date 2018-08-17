@@ -17,7 +17,7 @@ impl<T: Dummy> Stream<T> {
         Stream { pos: 0, storage: data }
     }
 
-    pub fn pop_front(&mut self) -> Option<T> {
+    pub fn consume(&mut self) -> Option<T> {
         let slot = match self.storage.get_mut(self.pos) {
             Some(slot) => slot,
             None => return None,
@@ -29,13 +29,17 @@ impl<T: Dummy> Stream<T> {
     }
 
     /// Panics on capacity overflow
-    pub fn push_front(&mut self, val: T) {
+    pub fn _unconsume(&mut self, val: T) {
         if self.pos == 0 {
             panic!("Stream: can't push front for there's no space");
         }
 
         self.pos -= 1;
         self.storage[self.pos] = val;
+    }
+
+    pub fn peek(&self) -> Option<&T> {
+        self.first()
     }
 }
 

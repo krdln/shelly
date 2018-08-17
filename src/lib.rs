@@ -7,6 +7,7 @@ extern crate lazy_static;
 extern crate toml;
 #[macro_use]
 extern crate serde_derive;
+extern crate yansi;
 
 pub mod lint;
 mod config;
@@ -29,11 +30,11 @@ use lint::Lint;
 
 pub use config::ConfigFile;
 
-pub fn run(root_path: impl AsRef<Path>, emitter: &mut Emitter) -> Result<(), Error> {
-    run_(root_path.as_ref(), emitter)
+pub fn run(root_path: impl AsRef<Path>, run_opt: RunOpt, emitter: &mut Emitter) -> Result<(), Error> {
+    run_(root_path.as_ref(), run_opt, emitter)
 }
 
-fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
+fn run_(root_path: &Path, run_opt: RunOpt, raw_emitter: &mut Emitter) -> Result<(), Error> {
     use preprocess::PreprocessOutput;
 
     let config = load_config_from_dir(root_path).context("Loading shelly config")?;
@@ -55,7 +56,7 @@ fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
             continue;
         }
 
-        match preprocess::parse_and_preprocess(entry.path(), &mut emitter)? {
+        match preprocess::parse_and_preprocess(entry.path(), &run_opt, &mut emitter)? {
             PreprocessOutput::Valid(mut parsed) => {
                 let path = entry.path().canonicalize()?;
 
@@ -78,6 +79,11 @@ fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
     testnames::analyze(&files, &mut emitter);
 
     Ok(())
+}
+
+#[derive(Default)]
+pub struct RunOpt {
+    pub debug_parser: bool,
 }
 
 pub fn load_config_from_dir(dir_path: &Path) -> Result<ConfigFile, Error> {

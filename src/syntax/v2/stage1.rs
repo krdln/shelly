@@ -42,13 +42,13 @@ use self::TokenTree as TT;
 /// List of consecutive TokenTrees.
 type TokenStream = Box<[TT]>;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Spacing {
     Alone,
     Joined,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Delimiter {
     Parenthesis,
     Brace,

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use regex::Regex;
 
-mod v2;
+pub(crate) mod v2;
 
 /// Parsed source file
 #[derive(Debug)]
@@ -61,7 +61,7 @@ pub struct Testcase {
 }
 
 /// Parses a source file
-pub fn parse(source: &str) -> File {
+pub fn parse(source: &str, debug: bool) -> File {
     lazy_static! {
         static ref IMPORT: Regex = Regex::new(
             r"(?ix) ^ \s* \. \s+ (.*?) \s* (\#.*)? $"
@@ -94,6 +94,8 @@ pub fn parse(source: &str) -> File {
 
     // Strip BOM
     let source = source.trim_left_matches('\u{feff}');
+
+    let _ = v2::parse(source, debug);
 
     let mut definitions = Vec::new();
     let mut usages = Vec::new();
@@ -177,7 +179,7 @@ fn test_basics() {
         }
     "#;
 
-    let parsed = parse(source);
+    let parsed = parse(source, false);
 
     assert_eq!(parsed.imports[0].importee, Importee::HereSut);
     assert_eq!(parsed.imports[1].importee, Importee::HereSut);
@@ -206,7 +208,7 @@ fn test_nested() {
         }
     "#;
 
-    let parsed = parse(source);
+    let parsed = parse(source, false);
 
     let mut funs: Vec<_> = parsed.definitions
         .iter()

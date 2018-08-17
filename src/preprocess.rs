@@ -6,6 +6,7 @@ use std::fs;
 use lint::Lint;
 use lint::Emitter;
 use syntax;
+use RunOpt;
 
 /// Parsed and preprocessed source file
 #[derive(Debug, Default)]
@@ -29,9 +30,11 @@ pub enum PreprocessOutput {
 }
 
 /// Parses and preprocesses a file for further analysys.
-pub fn parse_and_preprocess(path: &Path, emitter: &mut Emitter) -> Result<PreprocessOutput, Error> {
+pub fn parse_and_preprocess(path: &Path, run_opt: &RunOpt, emitter: &mut Emitter) -> Result<PreprocessOutput, Error> {
     let source = fs::read_to_string(path)?;
-    let file = syntax::parse(&source);
+
+    if run_opt.debug_parser { println!("Trying to parse {}", path.display()); }
+    let file = syntax::parse(&source, run_opt.debug_parser);
 
     let resolved_imports = match resolve_imports(path, file.imports, emitter)? {
         Some(imports) => imports,
