@@ -31,16 +31,22 @@ pub struct Span {
     pub end: Location,
 }
 
+impl Location {
+    pub fn start() -> Location {
+        Location {
+            byte: 0,
+            line: 1,
+            col: 1,
+        }
+    }
+}
+
 impl<'source> Muncher<'source> {
     pub fn new(source: &'source str) -> Muncher<'source> {
         assert_eq!(source.len() as u32 as usize, source.len());
 
         Muncher {
-            stream_location: Location {
-                byte: 0,
-                line: 1,
-                col: 1,
-            },
+            stream_location: Location::start(),
             peeked_char: None,
             rest_of_stream: source,
         }
