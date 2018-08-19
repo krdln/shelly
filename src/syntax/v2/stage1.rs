@@ -149,6 +149,14 @@ impl<'syntax> Parser<'syntax> {
                 '#'                    => { self.skip_to_newline(); continue }
                 '@'                    => self.parse_at()?,
                 '\'' | '\"'            => self.parse_string(None)?,
+                '<'                    => {
+                    if self.muncher.peek_2nd_char() == Some('#') {
+                        self.skip_long_comment()?;
+                        continue;
+                    } else {
+                        self.parse_symbol()
+                    }
+                }
                 w if can_start_word(w) => self.parse_word(),
                 n if n.is_numeric()    => self.parse_number(),
                 s if s.is_whitespace() => { self.consume_char(); continue }
@@ -224,6 +232,21 @@ impl<'syntax> Parser<'syntax> {
         while self.peek_char() != Some('\n') {
             self.consume_char();
         }
+    }
+
+    fn skip_long_comment(&mut self) -> Result<()> {
+        self.consume_char();
+        self.consume_char();
+
+        while let Some((c, _)) = self.consume_char() {
+            if c == '#' {
+                if let Some(('>', _)) = self.consume_char() {
+                    return Ok(())
+                }
+            }
+        }
+
+        self.current_location().error("Unclosed long comment")
     }
 
     // Assuming it's a '@'
@@ -400,6 +423,7 @@ here: @'lol'@
 fn comments() {
     assert_parse_matches!(
         "foo # nieprawda\nbar" => TT::Word{..}, TT::Symbol{..}, TT::Word{..} => true
+        "foo <# # > #> bar" => TT::Word{..}, TT::Word{..} => true
         "# komentarz\n" => TT::Symbol { symbol: '\n', .. } => true
     );
 }

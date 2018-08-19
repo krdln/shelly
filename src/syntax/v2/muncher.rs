@@ -86,6 +86,11 @@ impl<'source> Muncher<'source> {
         self.peek_char()
     }
 
+    pub fn peek_2nd_char(&mut self) -> Option<char> {
+        self.peek_char();
+        self.rest_of_stream.chars().next()
+    }
+
     pub fn next_char(&mut self) -> Option<(char, Span)> {
         match self.peeked_char.take() {
             None   => {
