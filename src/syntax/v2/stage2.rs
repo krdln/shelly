@@ -69,6 +69,7 @@ pub enum TokenTree {
 
 pub use syntax::v2::stage1::Delimiter;
 
+// TODO make it a proper newtype
 pub type TokenStream = Box<[TokenTree]>;
 
 pub use self::TokenTree as TT;
@@ -411,6 +412,21 @@ fn parse_variable_name(mut dollar_span: Option<Span>, stream: &mut Stream<TT1>, 
             output.push(TT::Symbol { symbol: ':', span });
         } else {
             break
+        }
+    }
+}
+
+pub fn traverse_streams(stream: &[TT], mut fun: impl FnMut(&[TT])) {
+    traverse_streams_(stream, &mut fun);
+}
+
+fn traverse_streams_(stream: &[TT], fun: &mut impl FnMut(&[TT])) {
+    fun(stream);
+    for tt in stream.iter() {
+        match tt {
+            TT::Group { interior, .. }            |
+            TT::String { subtrees: interior, .. } => traverse_streams_(interior, fun),
+            _                                     => ()
         }
     }
 }

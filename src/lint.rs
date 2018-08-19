@@ -96,6 +96,9 @@ lints!{
 
     /// Unknown lint allowed in a comment
     UnknownLints: "unknown-lints" => Warn,
+
+    /// Shelly couldn't parse this syntax
+    SyntaxErrors: "syntax-errors" => Warn,
 }
 
 impl Lint {

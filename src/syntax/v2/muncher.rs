@@ -39,6 +39,20 @@ impl Location {
             col: 1,
         }
     }
+
+    pub fn find_line<'source>(&self, source: &'source str) -> &'source str {
+        let mut start = self.byte as usize;
+        loop {
+            if start == 0 {
+                break;
+            } if source.as_bytes().get(start) == Some(&b'\n') {
+                start += 1;
+                break;
+            }
+            start -= 1;
+        }
+        source[start..].lines().next().unwrap_or("")
+    }
 }
 
 impl<'source> Muncher<'source> {

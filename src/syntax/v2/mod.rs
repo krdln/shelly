@@ -17,11 +17,14 @@
 // Note: After refactoring this module should be merged with crate::syntax.
 
 mod muncher;
-use syntax::v2::muncher::Muncher;
-use syntax::v2::muncher::{Span, Location};
+use self::muncher::Muncher;
+use self::muncher::{Span, Location};
 
 mod stage1;
 mod stage2;
+pub use self::stage2::traverse_streams;
+pub use self::stage2::TokenTree;
+
 mod stream;
 
 impl Location {
@@ -35,8 +38,8 @@ impl Location {
 
 #[derive(Debug)]
 pub struct Error {
-    what: String,
-    where_: Location,
+    pub what: String,
+    pub where_: Location,
 }
 pub type Result<T> = ::std::result::Result<T, Error>;
 

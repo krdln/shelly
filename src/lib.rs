@@ -70,6 +70,12 @@ fn run_(root_path: &Path, run_opt: RunOpt, raw_emitter: &mut Emitter) -> Result<
                     entry.path().display()
                 );
             }
+            PreprocessOutput::SyntaxErrors => {
+                eprintln!(
+                    "Stopping analysis for this file because of syntax errors: {}\n",
+                    entry.path().display()
+                );
+            }
         };
     }
 
