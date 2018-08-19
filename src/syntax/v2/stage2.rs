@@ -194,14 +194,16 @@ fn transform(input: Box<[TT1]>, start_mode: Mode, delimiter: Delimiter, whole_so
                 let ident = FileStr::from(span);
 
                 match ident.cut_from(whole_source) {
-                    "function" => {
+                    "function" | "Function" => {
                         output.push(TT::FunctionKeyword { span });
                     }
-                    "class" => {
+                    "class" | "Class" => {
                         output.push(TT::ClassKeyword { span });
                         class_keyword_encountered = true;
+                        // field, because we use Field as class names anyway
+                        current_mode = Mode::Field;
                     }
-                    "return" => {
+                    "return" | "Return" => {
                         output.push(TT::ReturnKeyword { span });
                         current_mode = Mode::Function;
                     }

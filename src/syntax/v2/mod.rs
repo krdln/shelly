@@ -70,3 +70,29 @@ pub fn parse(source: &str, debug: bool) -> Result<stage2::TokenStream> {
         }
     }
 }
+
+pub fn ident_is_keyword(ident: &str) -> bool {
+    match &*ident.to_lowercase() {
+        | "throw"
+        | "try"
+        | "catch"
+        | "finally"
+        | "if"
+        | "ifelse"
+        | "else"
+        | "foreach"
+        | "do"
+        | "while"
+        | "begin"
+        | "process"
+        | "end"
+        | "exit"
+        | "continue"
+        | "break"
+        | "return"
+        | "function"
+        | "in"
+        | "param" => true,
+        | _       => false
+    }
+}

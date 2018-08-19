@@ -96,7 +96,8 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
 
     v2::traverse_streams(&token_tree_stream, |stream| {
         let mut is_function_definition = false;
-        for tt in stream {
+        let mut iter = stream.iter();
+        while let Some(tt) = iter.next() {
             match *tt {
                 v2::TokenTree::Cmdlet { span, ident } => {
                     let location = Line {
@@ -108,7 +109,9 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
                     if is_function_definition {
                         definitions.push(Definition { location, name });
                     } else {
-                        usages.push(Usage { location, name });
+                        if !v2::ident_is_keyword(&name) && !name.ends_with(".exe") {
+                            usages.push(Usage { location, name });
+                        }
                     }
                 }
                 _ => {}
