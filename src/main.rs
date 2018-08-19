@@ -8,7 +8,7 @@ use yansi::{Color, Paint};
 
 use std::path::{Path, PathBuf};
 
-use shelly::{Line, EmittedItem, lint::{Lint, self}};
+use shelly::{Line, EmittedItem, RunOpt, lint::{Lint, self}};
 
 #[macro_use]
 extern crate structopt;
@@ -30,6 +30,23 @@ enum Subcommand {
     /// Show available lints
     #[structopt(name = "show-lints")]
     ShowLints,
+
+    /// Run analysis (also default when no command specified)
+    #[structopt(name = "analyze")]
+    Analyze(AnalyzeOpt),
+}
+
+#[derive(StructOpt, Debug, Default)]
+struct AnalyzeOpt {
+    /// Print output of the parser (tastes best with `| less -R`)
+    #[structopt(long = "debug-parser")]
+    debug_parser: bool,
+}
+
+impl AnalyzeOpt {
+    fn run_opt(&self) -> RunOpt {
+        RunOpt { debug_parser: self.debug_parser }
+    }
 }
 
 fn run() -> Result<(), Error> {
@@ -47,8 +64,11 @@ fn run() -> Result<(), Error> {
         Some(Subcommand::ShowLints) => {
             print_lints(&opt.directory);
         }
+        Some(Subcommand::Analyze(ref analyze_opt)) => {
+            shelly::run(opt.directory, analyze_opt.run_opt(), &mut CliEmitter {})?
+        }
         None => {
-            shelly::run(opt.directory, &mut CliEmitter {})?
+            shelly::run(opt.directory, Default::default(), &mut CliEmitter {})?
         }
     }
 

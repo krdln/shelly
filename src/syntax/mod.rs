@@ -2,6 +2,10 @@ use std::path::PathBuf;
 
 use regex::Regex;
 
+mod v2;
+pub use self::v2::Error;
+pub use self::v2::Result;
+
 /// Parsed source file
 #[derive(Debug)]
 pub struct File {
@@ -59,8 +63,9 @@ pub struct Testcase {
 }
 
 /// Parses a source file
-pub fn parse(source: &str) -> File {
+pub fn parse(source: &str, debug: bool) -> Result<File> {
     lazy_static! {
+        // TODO rewrite import parsing from regexes to token streams
         static ref IMPORT: Regex = Regex::new(
             r"(?ix) ^ \s* \. \s+ (.*?) \s* (\#.*)? $"
         ).unwrap();
@@ -73,18 +78,7 @@ pub fn parse(source: &str) -> File {
             r#"(?ix) ^ ["]? \$ here [/\\] \$ sut ["]? $"#
         ).unwrap();
 
-        // Note: it captures also definitions of nested functions,
-        // so it's overly optimistic wrt. code correctness.
-        static ref DEFINITION: Regex = Regex::new(
-            r"(?ix) ^ \s* function \s+ ([a-z][a-z0-9-]*) .* $"
-        ).unwrap();
-
-        // For now, conservatively treat only [$x = ] Verb-Foo
-        // at the very beginning of line as usage.
-        static ref USAGE: Regex = Regex::new(
-            r"(?ix) ^ \s* (?: \$\S+ \s*=\s*)? ([[:alpha:]]+-[a-z0-9]+) (?: \s+ .*)? $"
-        ).unwrap();
-
+        // TODO rewrite testcase parsing to token streams
         static ref TESTCASE: Regex = Regex::new(
             r#"(?ix) ^ \s* It \s+ " ([^"]*) " "#
         ).unwrap();
@@ -93,10 +87,42 @@ pub fn parse(source: &str) -> File {
     // Strip BOM
     let source = source.trim_left_matches('\u{feff}');
 
+    let token_tree_stream = v2::parse(source, debug)?;
+
     let mut definitions = Vec::new();
     let mut usages = Vec::new();
     let mut imports = Vec::new();
     let mut testcases = Vec::new();
+
+    v2::traverse_streams(&token_tree_stream, |stream| {
+        let mut is_function_definition = false;
+        let mut iter = stream.iter();
+        while let Some(tt) = iter.next() {
+            match *tt {
+                v2::TokenTree::Cmdlet { span, ident } => {
+                    let location = Line {
+                        line: span.start.find_line(source).to_owned(),
+                        no:   span.start.line,
+                    };
+                    let name = ident.cut_from(source).to_owned();
+
+                    if is_function_definition {
+                        definitions.push(Definition { location, name });
+                    } else {
+                        if !v2::ident_is_keyword(&name) && !name.ends_with(".exe") {
+                            usages.push(Usage { location, name });
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            is_function_definition = match *tt {
+                v2::TokenTree::FunctionKeyword { .. } => true,
+                _                                     => false,
+            };
+        }
+    });
 
     for (line, line_no) in source.lines().zip(1..) {
 
@@ -122,20 +148,6 @@ pub fn parse(source: &str) -> File {
             })
         }
 
-        if let Some(captures) = DEFINITION.captures(line) {
-            definitions.push(Definition {
-                location: get_location(),
-                name: captures[1].to_owned(),
-            });
-        }
-
-        if let Some(captures) = USAGE.captures(line) {
-            usages.push(Usage {
-                location: get_location(),
-                name: captures[1].to_owned(),
-            });
-        }
-
         if let Some(captures) = TESTCASE.captures(line) {
             testcases.push(Testcase {
                 location: get_location(),
@@ -144,12 +156,12 @@ pub fn parse(source: &str) -> File {
         }
     }
 
-    File {
+    Ok(File {
         definitions,
         usages,
         imports,
         testcases,
-    }
+    })
 }
 
 #[test]
@@ -175,7 +187,7 @@ fn test_basics() {
         }
     "#;
 
-    let parsed = parse(source);
+    let parsed = parse(source, false).unwrap();
 
     assert_eq!(parsed.imports[0].importee, Importee::HereSut);
     assert_eq!(parsed.imports[1].importee, Importee::HereSut);
@@ -204,7 +216,7 @@ fn test_nested() {
         }
     "#;
 
-    let parsed = parse(source);
+    let parsed = parse(source, false).unwrap();
 
     let mut funs: Vec<_> = parsed.definitions
         .iter()
