@@ -11,6 +11,7 @@ New-ContainerNetwork
 Remove-ContainerNetwork
 Get-NetAdapter
 Get-NetIPAddress
+Get-NetIPConfiguration
 Get-VMNetworkAdapter
 Get-VMSwitchExtension
 Enable-VMSwitchExtension
