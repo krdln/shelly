@@ -36,5 +36,9 @@ Invoke-ScriptAnalyzer
 
 scons
 docker
+go
 dep
 py
+pip
+cargo
+hostname
