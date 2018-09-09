@@ -38,7 +38,9 @@ fn run_(root_path: &Path, run_opt: RunOpt, raw_emitter: &mut Emitter) -> Result<
     use preprocess::PreprocessOutput;
 
     let config = load_config_from_dir(root_path).context("Loading shelly config")?;
-    let lint_config = lint::Config::from_config_file(&config).context("Loading lint levels config")?;
+    let lint_config = lint::Config::from_config_file(&config)
+        .context("Loading lint levels config")?
+        .with_overrides(&run_opt.lint_overrides);
 
     let mut emitter = lint::Emitter::new(raw_emitter, lint_config);
 
@@ -90,6 +92,7 @@ fn run_(root_path: &Path, run_opt: RunOpt, raw_emitter: &mut Emitter) -> Result<
 #[derive(Default)]
 pub struct RunOpt {
     pub debug_parser: bool,
+    pub lint_overrides: Map<lint::Lint, lint::Level>,
 }
 
 pub fn load_config_from_dir(dir_path: &Path) -> Result<ConfigFile, Error> {

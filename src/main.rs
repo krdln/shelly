@@ -7,6 +7,7 @@ extern crate yansi;
 use yansi::{Color, Paint};
 
 use std::path::{Path, PathBuf};
+use std::collections::BTreeMap as Map;
 
 use shelly::{Line, EmittedItem, RunOpt, lint::{Lint, self}};
 
@@ -41,11 +42,38 @@ struct AnalyzeOpt {
     /// Print output of the parser (tastes best with `| less -R`)
     #[structopt(long = "debug-parser")]
     debug_parser: bool,
+
+    /// Set the level of this lint to `allow`
+    #[structopt(short = "A", long = "allow", value_name = "LINT")]
+    allowed_lints: Vec<Lint>,
+
+    /// Set the level of this lint to `warn`
+    #[structopt(short = "W", long = "warn", value_name = "LINT")]
+    warned_lints: Vec<Lint>,
+
+    /// Set the level of this lint to `deny`
+    #[structopt(short = "D", long = "deny", value_name = "LINT")]
+    denied_lints: Vec<Lint>,
 }
 
 impl AnalyzeOpt {
     fn run_opt(&self) -> RunOpt {
-        RunOpt { debug_parser: self.debug_parser }
+        let mut lint_overrides = Map::new();
+
+        for &(lints, level) in &[
+            (&self.allowed_lints, lint::Level::Allow),
+            (&self.warned_lints, lint::Level::Warn),
+            (&self.denied_lints, lint::Level::Deny),
+        ] {
+            for &lint in lints {
+                lint_overrides.insert(lint, level);
+            }
+        }
+
+        RunOpt {
+            debug_parser: self.debug_parser,
+            lint_overrides,
+        }
     }
 }
 
@@ -112,6 +140,10 @@ fn print_lints(dir: &Path) {
         };
         println!("{:>30}: {:?}{}", lint.slug(), level, note);
     }
+
+    println!(r"
+Use `shelly.toml` config or -A/-W/-D flags for `analyze` subcommand
+to change the default levels.");
 }
 
 struct CliEmitter {}

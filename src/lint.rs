@@ -1,6 +1,7 @@
 use std::collections::BTreeMap as Map;
 use std::collections::BTreeSet as Set;
 use std::str::FromStr;
+use std::fmt;
 
 use regex::Regex;
 use failure;
@@ -60,15 +61,15 @@ macro_rules! lints {
             }
         }
 
-        #[derive(Debug, Copy, Clone)]
-        pub struct UnknownLint;
+        #[derive(Debug, Clone, Eq, PartialEq)]
+        pub struct UnknownLint(String);
 
         impl ::std::str::FromStr for Lint {
             type Err = UnknownLint;
             fn from_str(s: &str) -> Result<Lint, UnknownLint> {
                 match s {
                     $( $slug => Ok(Lint::$name), )+
-                    _ => Err(UnknownLint),
+                    s => Err(UnknownLint(s.to_owned())),
                 }
             }
         }
@@ -101,6 +102,12 @@ lints!{
     SyntaxErrors: "syntax-errors" => Warn,
 }
 
+impl fmt::Display for UnknownLint {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Unknown lint: `{}`", self.0)
+    }
+}
+
 impl Lint {
     pub fn level(&self, config: &Config) -> Level {
         let uncapped_level = config
@@ -112,10 +119,7 @@ impl Lint {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
-struct SpecificUnknownLint<'a>(&'a str);
-
-fn parse_allow_annotation(line: &str) -> Result<Option<(Lint, Option<&str>)>, SpecificUnknownLint> {
+fn parse_allow_annotation(line: &str) -> Result<Option<(Lint, Option<&str>)>, UnknownLint> {
     lazy_static!(
         static ref RE: Regex = Regex::new(
             r"(?ix) ^ [^\#]* \# \s* (?: shelly:|analyzer:)? \s*
@@ -129,7 +133,7 @@ fn parse_allow_annotation(line: &str) -> Result<Option<(Lint, Option<&str>)>, Sp
     };
 
     let lint = captures.get(1).unwrap().as_str();
-    let lint = lint.parse().map_err(|_| SpecificUnknownLint(lint))?;
+    let lint = lint.parse()?;
     let what = captures.get(2).map(|match_| match_.as_str());
 
     Ok(Some((lint, what)))
@@ -143,7 +147,7 @@ fn test_parse_allow_annotation() {
     );
     assert_eq!(
         parse_allow_annotation("New-Foo # allow unicorns"),
-        Err(SpecificUnknownLint("unicorns")),
+        Err(UnknownLint("unicorns".to_owned())),
     );
     assert_eq!(
         parse_allow_annotation("New-Foo # allow unknown-functions"),
@@ -204,6 +208,11 @@ impl Config {
 
         Ok(config)
     }
+
+    pub fn with_overrides(mut self, overrides: &Map<Lint, Level>) -> Self {
+        self.overrides.extend(overrides);
+        self
+    }
 }
 
 #[test]
@@ -227,6 +236,20 @@ fn misc() {
 
     config.cap = Level::Allow;
     assert_eq!(Lint::UnknownFunctions.level(&config), Level::Allow);
+}
+
+#[test]
+fn overrides() {
+    let mut config = Config::default();
+    config.overrides.insert("unknown-functions".parse().unwrap(), Level::Warn);
+
+    let overrides = ::std::iter::once(
+        (Lint::UnknownFunctions, Level::Deny)
+    ).collect();
+
+    config = config.with_overrides(&overrides);
+
+    assert_eq!(Lint::UnknownFunctions.level(&config), Level::Deny);
 }
 
 #[test]
