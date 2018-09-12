@@ -1,5 +1,7 @@
 use failure::Error;
 
+use unicase::UniCase;
+
 use std::collections::BTreeMap as Map;
 use std::collections::BTreeSet as Set;
 use std::path::{Path, PathBuf};
@@ -10,15 +12,20 @@ use preprocess::Parsed;
 use ConfigFile;
 
 struct Config {
-    custom_cmdlets: Set<String>,
+    custom_cmdlets: Set<UniCase<String>>,
 }
 
 impl Config {
     fn from_config_file(config_file: &ConfigFile) -> Config {
-        let custom_cmdlets = config_file.extras
-            .as_ref()
+        let custom_cmdlets = config_file.extras.as_ref()
             .and_then(|extras| extras.cmdlets.as_ref())
-            .map(|cmdlets| cmdlets.iter().cloned().collect())
+            .map(|cmdlets| 
+                cmdlets
+                    .iter()
+                    .cloned()
+                    .map(|cmdlet| UniCase::new(cmdlet))
+                    .collect()
+            )
             .unwrap_or_else(Set::new);
 
         Config { custom_cmdlets }
@@ -29,11 +36,11 @@ impl Config {
 #[derive(Debug, Clone, Default)]
 pub struct Scope<'a> {
     /// Functions defined in this scope
-    defined: Set<&'a str>,
+    defined: Set<UniCase<&'a str>>,
     /// Defined by a file imported by `.`
-    directly_imported: Set<&'a str>,
+    directly_imported: Set<UniCase<&'a str>>,
     /// All the functions in scope
-    pub all: Set<&'a str>,
+    pub all: Set<UniCase<&'a str>>,
     /// All the files imported (directly and indirectly)
     files: Set<&'a Path>,
 }
@@ -48,7 +55,8 @@ enum Found {
 }
 
 impl<'a> Scope<'a> {
-    fn search(&self, name: &str) -> Option<Found> {
+    // fn search(&self, name: &str) -> Option<Found> {
+    fn search(&self, name: &UniCase<&str>) -> Option<Found> {
         if self.all.contains(name) {
             if self.defined.contains(name) || self.directly_imported.contains(name) {
                 Some(Found::Direct)
@@ -76,9 +84,10 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
     -> Result<Map<&'a Path, Scope<'a>>, Error>
 {
     lazy_static! {
-        static ref BUILTINS: Set<&'static str> = include_str!("builtins.txt")
+        static ref BUILTINS: Set<UniCase<&'static str>> = include_str!("builtins.txt")
             .split_whitespace()
             .chain(include_str!("extras.txt").split_whitespace())
+            .map(UniCase::new)
             .collect();
     }
 
@@ -94,19 +103,19 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
         let mut already_analyzed = Set::new();
 
         for usage in &parsed.usages {
-            if BUILTINS.contains(usage.name.as_str()) {
+            if BUILTINS.contains(&UniCase::new(&usage.name)) {
                 continue;
             }
-            if config.custom_cmdlets.contains(&usage.name) {
+            if config.custom_cmdlets.contains(&UniCase::new(usage.name.clone())) {
                 continue;
             }
-            if already_analyzed.contains(usage.name.as_str()) {
+            if already_analyzed.contains(&UniCase::new(&usage.name)) {
                 continue;
             }
 
-            already_analyzed.insert(usage.name.as_str());
+            already_analyzed.insert(UniCase::new(&usage.name));
 
-            match scope.search(&usage.name) {
+            match scope.search(&UniCase::new(&usage.name)) {
                 None => {
                     usage.location.in_file(&parsed.original_path)
                         .lint(Lint::UnknownFunctions, format!("Not in scope: {}", usage.name))
@@ -168,8 +177,8 @@ fn get_scope<'a>(
     }
 
     for definition in &parsed_file.definitions {
-        scope.defined.insert(&definition.name);
-        scope.all.insert(&definition.name);
+        scope.defined.insert(UniCase::new(&definition.name));
+        scope.all.insert(UniCase::new(&definition.name));
     }
 
     scope.files.insert(file);

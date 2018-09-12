@@ -94,6 +94,9 @@ lints!{
     /// Strict mode not enabled
     NoStrictMode: "no-strict-mode" => Warn,
 
+    /// Function name differs between usage and definition
+    CaseSensitivity: "case-sensitive" => Warn,
+
     /// Unknown lint allowed in a comment
     UnknownLints: "unknown-lints" => Warn,
 }

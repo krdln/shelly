@@ -115,3 +115,19 @@ fn test_allow_comments() {
 
     assert_eq!(errors.len(), 1);
 }
+
+#[test]
+fn test_complains_if_function_usage_has_different_cases_than_declaration() {
+    let errors = test_file(Contents(r#"
+        Set-StrictMode -Version Latest
+
+        function Set-Something {
+
+        }
+
+        Set-something 
+    "#));
+    println!("{:?}", errors);
+
+    assert_eq!(errors.len(), 1);
+}

@@ -7,6 +7,7 @@ extern crate lazy_static;
 extern crate toml;
 #[macro_use]
 extern crate serde_derive;
+extern crate unicase;
 
 pub mod lint;
 mod config;
@@ -15,6 +16,7 @@ mod preprocess;
 mod scope;
 mod strictness;
 mod testnames;
+mod casesensitivity;
 
 use walkdir::WalkDir;
 
@@ -76,6 +78,7 @@ fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
 
     strictness::analyze(&files, &scopes, &mut emitter);
     testnames::analyze(&files, &mut emitter);
+    casesensitivity::analyze(&files, &mut emitter);
 
     Ok(())
 }
