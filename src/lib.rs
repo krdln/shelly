@@ -8,6 +8,7 @@ extern crate toml;
 #[macro_use]
 extern crate serde_derive;
 extern crate unicase;
+extern crate yansi;
 
 pub mod lint;
 mod config;

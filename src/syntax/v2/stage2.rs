@@ -435,8 +435,7 @@ fn traverse_streams_(stream: &[TT], fun: &mut impl FnMut(&[TT])) {
 
 pub mod pretty {
     use super::*;
-    extern crate yansi;
-    use self::yansi::Color;
+    use yansi::Color;
 
     pub fn color_print(source: &str, stream: &[TokenTree]) {
         // println!("{:#?}", stream);
