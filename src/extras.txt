@@ -1,18 +1,44 @@
+Foreach-Object
+
 Import-Certificate
 
 Set-TestInconclusive
-New-ContainerNetwork
 Get-VMSwitch
 Get-NetNat
+Remove-NetNat
 Get-ContainerNetwork
+New-ContainerNetwork
+Remove-ContainerNetwork
 Get-NetAdapter
+Get-NetIPAddress
+Get-NetIPConfiguration
 Get-VMNetworkAdapter
+Get-VMSwitchExtension
 Enable-VMSwitchExtension
 Disable-VMSwitchExtension
 
 Invoke-Pester
 Assert-MockCalled
+InModuleScope
+Mock
+Describe
+Context
+BeforeAll
+AfterAll
+BeforeEach
+AfterEach
+It
+Should
 
 ConvertFrom-Yaml
 
 Invoke-ScriptAnalyzer
+
+scons
+docker
+go
+dep
+py
+pip
+cargo
+hostname

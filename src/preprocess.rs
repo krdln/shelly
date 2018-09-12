@@ -6,6 +6,8 @@ use std::fs;
 use lint::Lint;
 use lint::Emitter;
 use syntax;
+use RunOpt;
+use Line;
 
 /// Parsed and preprocessed source file
 #[derive(Debug, Default)]
@@ -26,12 +28,28 @@ pub enum PreprocessOutput {
 
     /// A file can't be preprocessed since it contains invalid imports
     InvalidImports,
+
+    /// A file can't be preprocessed since it contains syntax errors
+    SyntaxErrors,
 }
 
 /// Parses and preprocesses a file for further analysys.
-pub fn parse_and_preprocess(path: &Path, emitter: &mut Emitter) -> Result<PreprocessOutput, Error> {
+pub fn parse_and_preprocess(path: &Path, run_opt: &RunOpt, emitter: &mut Emitter) -> Result<PreprocessOutput, Error> {
     let source = fs::read_to_string(path)?;
-    let file = syntax::parse(&source);
+
+    if run_opt.debug_parser { println!("Trying to parse {}", path.display()); }
+    let file = match syntax::parse(&source, run_opt.debug_parser) {
+        Ok(file) => file,
+        Err(e)   => {
+            Line { line: e.where_.find_line(&source).to_owned(), no: e.where_.line }
+                .in_file(path)
+                .lint(Lint::SyntaxErrors, format!("Syntax error: {}", e.what))
+                .note(format!("Column {}", e.where_.col))
+                .note("If this is valid PowerShell syntax, please file an issue")
+                .emit(emitter);
+            return Ok(PreprocessOutput::SyntaxErrors);
+        }
+    };
 
     let resolved_imports = match resolve_imports(path, file.imports, emitter)? {
         Some(imports) => imports,

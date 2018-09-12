@@ -7,8 +7,9 @@ extern crate yansi;
 use yansi::{Color, Paint};
 
 use std::path::{Path, PathBuf};
+use std::collections::BTreeMap as Map;
 
-use shelly::{Line, EmittedItem, lint::{Lint, self}};
+use shelly::{Line, EmittedItem, RunOpt, lint::{Lint, self}};
 
 #[macro_use]
 extern crate structopt;
@@ -30,6 +31,50 @@ enum Subcommand {
     /// Show available lints
     #[structopt(name = "show-lints")]
     ShowLints,
+
+    /// Run analysis (also default when no command specified)
+    #[structopt(name = "analyze")]
+    Analyze(AnalyzeOpt),
+}
+
+#[derive(StructOpt, Debug, Default)]
+struct AnalyzeOpt {
+    /// Print output of the parser (tastes best with `| less -R`)
+    #[structopt(long = "debug-parser")]
+    debug_parser: bool,
+
+    /// Set the level of this lint to `allow`
+    #[structopt(short = "A", long = "allow", value_name = "LINT")]
+    allowed_lints: Vec<Lint>,
+
+    /// Set the level of this lint to `warn`
+    #[structopt(short = "W", long = "warn", value_name = "LINT")]
+    warned_lints: Vec<Lint>,
+
+    /// Set the level of this lint to `deny`
+    #[structopt(short = "D", long = "deny", value_name = "LINT")]
+    denied_lints: Vec<Lint>,
+}
+
+impl AnalyzeOpt {
+    fn run_opt(&self) -> RunOpt {
+        let mut lint_overrides = Map::new();
+
+        for &(lints, level) in &[
+            (&self.allowed_lints, lint::Level::Allow),
+            (&self.warned_lints, lint::Level::Warn),
+            (&self.denied_lints, lint::Level::Deny),
+        ] {
+            for &lint in lints {
+                lint_overrides.insert(lint, level);
+            }
+        }
+
+        RunOpt {
+            debug_parser: self.debug_parser,
+            lint_overrides,
+        }
+    }
 }
 
 fn run() -> Result<(), Error> {
@@ -47,8 +92,11 @@ fn run() -> Result<(), Error> {
         Some(Subcommand::ShowLints) => {
             print_lints(&opt.directory);
         }
+        Some(Subcommand::Analyze(ref analyze_opt)) => {
+            shelly::run(opt.directory, analyze_opt.run_opt(), &mut CliEmitter {})?
+        }
         None => {
-            shelly::run(opt.directory, &mut CliEmitter {})?
+            shelly::run(opt.directory, Default::default(), &mut CliEmitter {})?
         }
     }
 
@@ -92,6 +140,10 @@ fn print_lints(dir: &Path) {
         };
         println!("{:>30}: {:?}{}", lint.slug(), level, note);
     }
+
+    println!(r"
+Use `shelly.toml` config or -A/-W/-D flags for `analyze` subcommand
+to change the default levels.");
 }
 
 struct CliEmitter {}

@@ -9,9 +9,9 @@ What it does:
 * Verify which functions/commandlets are in scope
 * Warn on "indirect imports"
 * Know about some builtins
+* Partially parses and understands PowersShell syntax
 
 What it does not
-* Actually parse the files (expect some false positives and false negatives)
 * Support case-insensivity
 * Support modules
 * Everything else

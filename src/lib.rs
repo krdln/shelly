@@ -31,15 +31,17 @@ use lint::Lint;
 
 pub use config::ConfigFile;
 
-pub fn run(root_path: impl AsRef<Path>, emitter: &mut Emitter) -> Result<(), Error> {
-    run_(root_path.as_ref(), emitter)
+pub fn run(root_path: impl AsRef<Path>, run_opt: RunOpt, emitter: &mut Emitter) -> Result<(), Error> {
+    run_(root_path.as_ref(), run_opt, emitter)
 }
 
-fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
+fn run_(root_path: &Path, run_opt: RunOpt, raw_emitter: &mut Emitter) -> Result<(), Error> {
     use preprocess::PreprocessOutput;
 
     let config = load_config_from_dir(root_path).context("Loading shelly config")?;
-    let lint_config = lint::Config::from_config_file(&config).context("Loading lint levels config")?;
+    let lint_config = lint::Config::from_config_file(&config)
+        .context("Loading lint levels config")?
+        .with_overrides(&run_opt.lint_overrides);
 
     let mut emitter = lint::Emitter::new(raw_emitter, lint_config);
 
@@ -57,7 +59,7 @@ fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
             continue;
         }
 
-        match preprocess::parse_and_preprocess(entry.path(), &mut emitter)? {
+        match preprocess::parse_and_preprocess(entry.path(), &run_opt, &mut emitter)? {
             PreprocessOutput::Valid(mut parsed) => {
                 let path = entry.path().canonicalize()?;
 
@@ -71,6 +73,12 @@ fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
                     entry.path().display()
                 );
             }
+            PreprocessOutput::SyntaxErrors => {
+                eprintln!(
+                    "Stopping analysis for this file because of syntax errors: {}\n",
+                    entry.path().display()
+                );
+            }
         };
     }
 
@@ -81,6 +89,12 @@ fn run_(root_path: &Path, raw_emitter: &mut Emitter) -> Result<(), Error> {
     casesensitivity::analyze(&files, &mut emitter);
 
     Ok(())
+}
+
+#[derive(Default)]
+pub struct RunOpt {
+    pub debug_parser: bool,
+    pub lint_overrides: Map<lint::Lint, lint::Level>,
 }
 
 pub fn load_config_from_dir(dir_path: &Path) -> Result<ConfigFile, Error> {
