@@ -43,6 +43,8 @@ pub struct Scope<'a> {
     pub all: Set<UniCase<&'a str>>,
     /// All the files imported (directly and indirectly)
     files: Set<&'a Path>,
+    /// All defined or directly imported functions
+    directly_imported_or_defined: Set<UniCase<&'a str>>,
 }
 
 /// Type of function found in scope
@@ -60,8 +62,7 @@ type IsValidCasing = bool;
 impl<'a> Scope<'a> {
     fn search(&self, name: &str) -> (Option<Found>, IsValidCasing) {
         let case_insensitive_name = UniCase::new(name);
-        let direct: Set<_> = self.defined.union(&self.directly_imported).cloned().collect();
-        match direct.get(&case_insensitive_name) {
+        match self.directly_imported_or_defined.get(&case_insensitive_name) {
             None => {
                 match self.all.get(&case_insensitive_name) {
                     None => {
@@ -127,15 +128,15 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
 
             already_analyzed.insert(UniCase::new(&usage.name));
 
-            let result = scope.search(&usage.name);
-            match result {
-                (None, _) => {
+            let (is_imported, is_letter_case_valid) = scope.search(&usage.name);
+            match is_imported {
+                None => {
                     usage.location.in_file(&parsed.original_path)
                         .lint(Lint::UnknownFunctions, format!("Not in scope: {}", usage.name))
                         .what(usage.name.clone())
                         .emit(emitter);
                 }
-                (Some(Found::Indirect), _) => {
+                Some(Found::Indirect) => {
                     usage.location.in_file(&parsed.original_path)
                         .lint(Lint::IndirectImports, format!("Indirectly imported: {}", usage.name))
                         .what(usage.name.clone())
@@ -143,14 +144,11 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                 }
                 _ => ()
             }
-            match result {
-                (_, false) => {
-                        usage.location.in_file(&parsed.original_path)
-                            .lint(Lint::InvalidLetterCasing, "Function name differs between usage and definition")
-                            .note(format!("Check whether the letter casing is the same"))
-                            .emit(emitter);
-                }
-                _ => ()
+            if !is_letter_case_valid {
+                usage.location.in_file(&parsed.original_path)
+                    .lint(Lint::InvalidLetterCasing, "Function name differs between usage and definition")
+                    .note(format!("Check whether the letter casing is the same"))
+                    .emit(emitter);
             }
         }
     }
@@ -194,6 +192,7 @@ fn get_scope<'a>(
     for import in &parsed_file.imports {
         let nested = get_scope(&import, files, scopes)?;
         scope.directly_imported.extend(&nested.defined);
+        scope.directly_imported_or_defined.extend(&nested.defined);
         scope.all.extend(&nested.all);
         scope.files.extend(&nested.files);
     }
@@ -201,6 +200,7 @@ fn get_scope<'a>(
     for definition in &parsed_file.definitions {
         scope.defined.insert(UniCase::new(&definition.name));
         scope.all.insert(UniCase::new(&definition.name));
+        scope.directly_imported_or_defined.insert(UniCase::new(&definition.name));
     }
 
     scope.files.insert(file);
