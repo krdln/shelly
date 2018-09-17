@@ -17,7 +17,6 @@ mod preprocess;
 mod scope;
 mod strictness;
 mod testnames;
-mod casesensitivity;
 
 use walkdir::WalkDir;
 
@@ -87,7 +86,6 @@ fn run_(root_path: &Path, run_opt: RunOpt, raw_emitter: &mut Emitter) -> Result<
 
     strictness::analyze(&files, &scopes, &mut emitter);
     testnames::analyze(&files, &mut emitter);
-    casesensitivity::analyze(&files, &mut emitter);
 
     Ok(())
 }

@@ -19,7 +19,7 @@ impl Config {
     fn from_config_file(config_file: &ConfigFile) -> Config {
         let custom_cmdlets = config_file.extras.as_ref()
             .and_then(|extras| extras.cmdlets.as_ref())
-            .map(|cmdlets| 
+            .map(|cmdlets|
                 cmdlets
                     .iter()
                     .cloned()
@@ -54,17 +54,29 @@ enum Found {
     Indirect,
 }
 
+/// Determines whether function usage matches function definitions letter-case wise
+type IsValidCasing = bool;
+
 impl<'a> Scope<'a> {
-    // fn search(&self, name: &str) -> Option<Found> {
-    fn search(&self, name: &UniCase<&str>) -> Option<Found> {
-        if self.all.contains(name) {
-            if self.defined.contains(name) || self.directly_imported.contains(name) {
-                Some(Found::Direct)
-            } else {
-                Some(Found::Indirect)
+    fn search(&self, name: &str) -> (Option<Found>, IsValidCasing) {
+        let case_insensitive_name = UniCase::new(name);
+        let direct: Set<_> = self.defined.union(&self.directly_imported).cloned().collect();
+        match direct.get(&case_insensitive_name) {
+            None => {
+                match self.all.get(&case_insensitive_name) {
+                    None => {
+                        (None, true)
+                    }
+                    Some(val) => {
+                        let is_valid_casing = val.to_string() == name;
+                        (Some(Found::Indirect), is_valid_casing)
+                    }
+                }
             }
-        } else {
-            None
+            Some(val) => {
+                let is_valid_casing = val.to_string() == name;
+                (Some(Found::Direct), is_valid_casing)
+            }
         }
     }
 }
@@ -115,20 +127,30 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
 
             already_analyzed.insert(UniCase::new(&usage.name));
 
-            match scope.search(&UniCase::new(&usage.name)) {
-                None => {
+            let result = scope.search(&usage.name);
+            match result {
+                (None, _) => {
                     usage.location.in_file(&parsed.original_path)
                         .lint(Lint::UnknownFunctions, format!("Not in scope: {}", usage.name))
                         .what(usage.name.clone())
                         .emit(emitter);
                 }
-                Some(Found::Indirect) => {
+                (Some(Found::Indirect), _) => {
                     usage.location.in_file(&parsed.original_path)
                         .lint(Lint::IndirectImports, format!("Indirectly imported: {}", usage.name))
                         .what(usage.name.clone())
                         .emit(emitter);
                 }
-                _ => (),
+                _ => ()
+            }
+            match result {
+                (_, false) => {
+                        usage.location.in_file(&parsed.original_path)
+                            .lint(Lint::InvalidLetterCasing, "Function name differs between usage and definition")
+                            .note(format!("Check whether the letter casing is the same"))
+                            .emit(emitter);
+                }
+                _ => ()
             }
         }
     }
@@ -301,5 +323,71 @@ mod test {
         assert_eq!(emitter.emitted_items.len(), 1);
         assert_eq!(emitter.emitted_items[0].kind, MessageKind::Warning);
         assert_eq!(emitter.emitted_items[0].lint, Lint::IndirectImports);
+    }
+
+    #[test]
+    fn test_can_detect_invalid_letter_casing() {
+        let files = vec![
+            (
+                "A".into(),
+                Parsed {
+                    usages: vec![usage("myfuna"), usage("MyFunB")],
+                    definitions: vec![definition("MyFunA"), definition("myfunb")],
+                    ..Parsed::default()
+                }
+            ),
+        ].into_iter().collect();
+
+        let mut emitter = VecEmitter::new();
+        analyze(
+            &files,
+            &ConfigFile::default(),
+            &mut Emitter::new(&mut emitter, lint::Config::default())
+        ).unwrap();
+        assert_eq!(emitter.emitted_items.len(), 2);
+        assert_eq!(emitter.emitted_items[0].lint, Lint::InvalidLetterCasing);
+        assert_eq!(emitter.emitted_items[1].lint, Lint::InvalidLetterCasing);
+    }
+
+    #[test]
+    fn test_detecting_invalid_letter_casing_works_for_multiple_files() {
+        let files = vec![
+            (
+                "file_A".into(),
+                Parsed {
+                    definitions: vec![definition("myfunb")],
+                    ..Parsed::default()
+                }
+            ),
+            (
+                "file_B".into(),
+                Parsed {
+                    usages: vec![usage("MyFunB")],
+                    definitions: vec![definition("MyFunA")],
+                    imports: vec!["file_A".into()],
+                    ..Parsed::default()
+                }
+            ),
+            (
+                "file_C".into(),
+                Parsed {
+                    usages: vec![usage("MyFunB"), usage("myFunA")],
+                    imports: vec!["file_B".into()],
+                    ..Parsed::default()
+                }
+            ),
+        ].into_iter().collect();
+
+        let mut emitter = VecEmitter::new();
+        analyze(
+            &files,
+            &ConfigFile::default(),
+            &mut Emitter::new(&mut emitter, lint::Config::default())
+        ).unwrap();
+        let invalid_casing_lints: Vec<_> = emitter.emitted_items
+            .into_iter()
+            .filter(|item| item.lint == Lint::InvalidLetterCasing)
+            .collect();
+        assert_eq!(invalid_casing_lints.len(), 3);
     }
 }

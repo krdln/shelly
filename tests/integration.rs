@@ -59,7 +59,6 @@ fn it_can_be_used_as_a_binary() {
         target_dir.pop();
     }
     let shelly_path = target_dir.join("shelly");
-    println!("{}", shelly_path.display());
 
     let output = Command::new(shelly_path)
         .current_dir("tests/testcases/case1")
