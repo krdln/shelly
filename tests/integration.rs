@@ -124,9 +124,7 @@ fn test_complains_if_function_usage_has_different_cases_than_declaration() {
 
         }
 
-        Set-something 
+        Set-something
     "#));
-    println!("{:?}", errors);
-
     assert_eq!(errors.len(), 1);
 }
