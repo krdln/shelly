@@ -59,7 +59,6 @@ fn it_can_be_used_as_a_binary() {
         target_dir.pop();
     }
     let shelly_path = target_dir.join("shelly");
-    println!("{}", shelly_path.display());
 
     let output = Command::new(shelly_path)
         .current_dir("tests/testcases/case1")
@@ -113,5 +112,19 @@ fn test_allow_comments() {
         Write-Foo  # allow unknown-functions(Write-Foo)
     "#));
 
+    assert_eq!(errors.len(), 1);
+}
+
+#[test]
+fn test_complains_if_function_usage_has_different_cases_than_declaration() {
+    let errors = test_file(Contents(r#"
+        Set-StrictMode -Version Latest
+
+        function Set-Something {
+
+        }
+
+        Set-something
+    "#));
     assert_eq!(errors.len(), 1);
 }
