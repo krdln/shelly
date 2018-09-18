@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.com/krdln/shelly.svg?branch=master)](https://travis-ci.com/krdln/shelly)
 
-A tool to qiuckly detect invalid or missing imports in powershell scripts.
+A tool to quickly detect invalid or missing imports in powershell scripts.
 
 What it does:
 * Validate dot imports (eg. `. $PSScriptRoot/Foo.ps1`)
