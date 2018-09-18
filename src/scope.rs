@@ -56,28 +56,23 @@ enum Found {
     Indirect,
 }
 
-/// Determines whether function usage matches function definitions letter-case wise
-type IsValidCasing = bool;
-
 impl<'a> Scope<'a> {
-    fn search(&self, name: &str) -> (Option<Found>, IsValidCasing) {
+    // I have no idea why 'a annotation on `name` is required.
+    // TODO investigate
+    fn search(&self, name: &'a str) -> Option<(Found, &'a str)> {
         let case_insensitive_name = UniCase::new(name);
-        match self.directly_imported_or_defined.get(&case_insensitive_name) {
-            None => {
-                match self.all.get(&case_insensitive_name) {
-                    None => {
-                        (None, true)
-                    }
-                    Some(val) => {
-                        let is_valid_casing = val.to_string() == name;
-                        (Some(Found::Indirect), is_valid_casing)
-                    }
-                }
+
+        match self.all.get(&case_insensitive_name) {
+            Some(original_name) => {
+                let directness = if self.directly_imported_or_defined.contains(&case_insensitive_name) {
+                    Found::Direct
+                } else {
+                    Found::Indirect
+                };
+
+                Some((directness, original_name))
             }
-            Some(val) => {
-                let is_valid_casing = val.to_string() == name;
-                (Some(Found::Direct), is_valid_casing)
-            }
+            None => None
         }
     }
 }
@@ -128,15 +123,15 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
 
             already_analyzed.insert(UniCase::new(&usage.name));
 
-            let (is_imported, is_letter_case_valid) = scope.search(&usage.name);
-            match is_imported {
+            let search_result = scope.search(&usage.name);
+            match search_result {
                 None => {
                     usage.location.in_file(&parsed.original_path)
                         .lint(Lint::UnknownFunctions, format!("Not in scope: {}", usage.name))
                         .what(usage.name.clone())
                         .emit(emitter);
                 }
-                Some(Found::Indirect) => {
+                Some((Found::Indirect, _)) => {
                     usage.location.in_file(&parsed.original_path)
                         .lint(Lint::IndirectImports, format!("Indirectly imported: {}", usage.name))
                         .what(usage.name.clone())
@@ -144,11 +139,13 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                 }
                 _ => ()
             }
-            if !is_letter_case_valid {
-                usage.location.in_file(&parsed.original_path)
-                    .lint(Lint::InvalidLetterCasing, "Function name differs between usage and definition")
-                    .note(format!("Check whether the letter casing is the same"))
-                    .emit(emitter);
+            if let Some((_, original_name)) = search_result {
+                if usage.name != original_name {
+                    usage.location.in_file(&parsed.original_path)
+                        .lint(Lint::InvalidLetterCasing, "Function name differs between usage and definition")
+                        .note(format!("Check whether the letter casing is the same"))
+                        .emit(emitter);
+                }
             }
         }
     }
