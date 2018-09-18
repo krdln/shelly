@@ -56,16 +56,10 @@ enum Found {
     Indirect,
 }
 
-/// Determines whether function usage matches function definitions letter-case wise
-enum Casing {
-    /// The same as in definition
-    Original,
-    /// Letter-casing differs from definition
-    Different,
-}
-
 impl<'a> Scope<'a> {
-    fn search(&self, name: &str) -> Option<(Found, Casing)> {
+    // I have no idea why 'a annotation on `name` is required.
+    // TODO investigate
+    fn search(&self, name: &'a str) -> Option<(Found, &'a str)> {
         let case_insensitive_name = UniCase::new(name);
 
         match self.all.get(&case_insensitive_name) {
@@ -76,13 +70,7 @@ impl<'a> Scope<'a> {
                     Found::Indirect
                 };
 
-                let casing = if name == &***original_name {
-                    Casing::Original
-                } else {
-                    Casing::Different
-                };
-
-                Some((directness, casing))
+                Some((directness, original_name))
             }
             None => None
         }
@@ -151,11 +139,13 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                 }
                 _ => ()
             }
-            if let Some((_, Casing::Different)) = search_result {
-                usage.location.in_file(&parsed.original_path)
-                    .lint(Lint::InvalidLetterCasing, "Function name differs between usage and definition")
-                    .note(format!("Check whether the letter casing is the same"))
-                    .emit(emitter);
+            if let Some((_, original_name)) = search_result {
+                if usage.name != original_name {
+                    usage.location.in_file(&parsed.original_path)
+                        .lint(Lint::InvalidLetterCasing, "Function name differs between usage and definition")
+                        .note(format!("Check whether the letter casing is the same"))
+                        .emit(emitter);
+                }
             }
         }
     }
