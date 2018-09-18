@@ -10,9 +10,9 @@ What it does:
 * Warn on "indirect imports"
 * Know about some builtins
 * Partially parses and understands PowersShell syntax
+* Understands case-insensitivity
 
 What it does not
-* Support case-insensivity
 * Support modules
 * Everything else
 
