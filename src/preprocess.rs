@@ -12,7 +12,7 @@ use Line;
 /// Parsed and preprocessed source file
 #[derive(Debug, Default)]
 pub struct Parsed {
-    pub imports: Vec<PathBuf>,
+    pub imports: Vec<syntax::Import>,
     pub definitions: Vec<syntax::Definition>,
     pub usages: Vec<syntax::Usage>,
     pub testcases: Vec<syntax::Testcase>,
@@ -68,20 +68,19 @@ pub fn parse_and_preprocess(path: &Path, run_opt: &RunOpt, emitter: &mut Emitter
 /// Verifies imports and canonicalizes their paths
 ///
 /// Returns None if any of imports were not recognized
-fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &mut Emitter)
-    -> Result<Option<Vec<PathBuf>>, Error>
+fn resolve_imports(source_path: &Path, mut imports: Vec<syntax::Import>, emitter: &mut Emitter)
+    -> Result<Option<Vec<syntax::Import>>, Error>
 {
     let mut import_error = false;
-    let mut resolved_imports = Vec::new();
 
-    for import in imports {
+    for import in &mut imports {
         use syntax::Importee;
 
         let dir = source_path.parent().unwrap();
         let filename = source_path.file_name().unwrap().to_str().unwrap();
 
         let dest_path = match import.importee {
-            Importee::Relative(relative_path) => dir.join(relative_path),
+            Importee::Relative(ref relative_path) => dir.join(relative_path),
             Importee::HereSut => dir.join(filename.replace(".Tests", "")),
             Importee::Unrecognized(_) => {
                 // Should we treat unrecognized import as an error also?
@@ -100,8 +99,9 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
         };
 
         if dest_path.exists() {
-            resolved_imports.push(dest_path.canonicalize()?)
+            import.resolved_import = Some(dest_path.canonicalize()?);
         } else {
+            import.resolved_import = None;
             import_error = true;
 
             import.location.in_file(source_path)
@@ -115,6 +115,6 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
         return Ok(None)
     }
 
-    Ok(Some(resolved_imports))
+    Ok(Some(imports))
 }
 

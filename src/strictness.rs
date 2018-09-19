@@ -36,7 +36,12 @@ pub fn analyze<'a>(
 
     for parsed in files.values() {
         for importee in &parsed.imports {
-            importees.insert(importee);
+            match &importee.resolved_import {
+                None => (),
+                Some(res) => {
+                    importees.insert(res);
+                }
+            }
         }
     }
 

@@ -10,6 +10,7 @@ use lint::Emitter;
 use lint::Lint;
 use preprocess::Parsed;
 use ConfigFile;
+use syntax;
 
 struct Config {
     custom_cmdlets: Set<UniCase<String>>,
@@ -45,6 +46,9 @@ pub struct Scope<'a> {
     files: Set<&'a Path>,
     /// All defined or directly imported functions
     directly_imported_or_defined: Set<UniCase<&'a str>>,
+    /// Directly imported definitions grouped by file. This introduces denormalized
+    /// data between directly_imported and this field.
+    definitions_per_import: Map<&'a syntax::Import, Set<UniCase<&'a str>>>,
 }
 
 /// Type of function found in scope
@@ -109,6 +113,21 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
         let parsed = &files[path];
 
         let mut already_analyzed = Set::new();
+
+        for (import, definitions) in &scope.definitions_per_import {
+            let mut something_imported_is_used = false;
+            for usage in &parsed.usages {
+                if definitions.contains(&UniCase::new(&usage.name)) {
+                    something_imported_is_used = true;
+                    break;
+                }
+            }
+            if !something_imported_is_used {
+                import.location.in_file(&parsed.original_path)
+                    .lint(Lint::UnusedImports, format!("Unused import: {}", import.location.line))
+                    .emit(emitter);
+            }
+        }
 
         for usage in &parsed.usages {
             if BUILTINS.contains(&UniCase::new(&usage.name)) {
@@ -187,11 +206,19 @@ fn get_scope<'a>(
     let mut scope = Scope::default();
 
     for import in &parsed_file.imports {
-        let nested = get_scope(&import, files, scopes)?;
-        scope.directly_imported.extend(&nested.defined);
-        scope.directly_imported_or_defined.extend(&nested.defined);
-        scope.all.extend(&nested.all);
-        scope.files.extend(&nested.files);
+        match &import.resolved_import {
+            None => (),
+            Some(res) => {
+                let nested = get_scope(res, files, scopes)?;
+                scope.directly_imported.extend(&nested.defined);
+                scope.directly_imported_or_defined.extend(&nested.defined);
+                scope.all.extend(&nested.all);
+                scope.files.extend(&nested.files);
+
+                let all_imported = nested.defined.union(&nested.directly_imported).cloned().collect();
+                scope.definitions_per_import.insert(import, all_imported);
+            }
+        }
     }
 
     for definition in &parsed_file.definitions {
@@ -209,7 +236,7 @@ fn get_scope<'a>(
 
 #[cfg(test)]
 mod test {
-    use syntax::{Line, Definition, Usage};
+    use syntax::{Line, Definition, Usage, Import, Importee};
     use VecEmitter;
     use MessageKind;
     use lint;
@@ -229,13 +256,21 @@ mod test {
         }
     }
 
+    fn import(relpath: &str) -> Import {
+        Import {
+            location: Line { line: format!(". $PSScriptRoot/{}", relpath), no: 1 },
+            importee: Importee::Relative(relpath.into()),
+            resolved_import: Some(PathBuf::from(relpath)),
+        }
+    }
+
     #[test]
     fn test_happy() {
         let files = vec![
             (
                 "A".into(),
                 Parsed {
-                    imports: vec!["B".into()],
+                    imports: vec![import("B")],
                     usages: vec![usage("funA1"), usage("funB1")],
                     definitions: vec![definition("funA1")],
                     ..Parsed::default()
@@ -263,8 +298,8 @@ mod test {
     #[test]
     fn test_loop() {
         let files = vec![
-            ("A".into(), Parsed { imports: vec!["B".into()], ..Parsed::default() }),
-            ("B".into(), Parsed { imports: vec!["A".into()], ..Parsed::default() }),
+            ("A".into(), Parsed { imports: vec![import("B")], ..Parsed::default() }),
+            ("B".into(), Parsed { imports: vec![import("A")], ..Parsed::default() }),
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
@@ -302,12 +337,26 @@ mod test {
                 "A".into(),
                 Parsed {
                     usages: vec![usage("funC1")],
-                    imports: vec!["B".into()],
+                    imports: vec![import("B")],
                     ..Parsed::default()
                 }
             ),
-            ("B".into(), Parsed { imports: vec!["C".into()], ..Parsed::default() }),
-            ("C".into(), Parsed { definitions: vec![definition("funC1")], ..Parsed::default() }),
+            (
+                "B".into(),
+                Parsed {
+                    imports: vec![import("C")],
+                    // we must use something from C, otherwise unused-imports will complain
+                    usages: vec![usage("funC2")],
+                    ..Parsed::default()
+                }
+            ),
+            (
+                "C".into(),
+                Parsed {
+                    definitions: vec![definition("funC1"), definition("funC2")],
+                    ..Parsed::default()
+                }
+            ),
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
@@ -320,6 +369,102 @@ mod test {
         assert_eq!(emitter.emitted_items.len(), 1);
         assert_eq!(emitter.emitted_items[0].kind, MessageKind::Warning);
         assert_eq!(emitter.emitted_items[0].lint, Lint::IndirectImports);
+    }
+
+    #[test]
+    fn test_complains_about_unused_import_if_imported_file_doesnt_use_anything_from_its_own_import_even_though_we_use_it() {
+        let files = vec![
+            (
+                "A".into(),
+                Parsed {
+                    usages: vec![usage("funB1"), usage("funC1")],
+                    imports: vec![import("B")],
+                    ..Parsed::default()
+                }
+            ),
+            (
+                "B".into(),
+                Parsed {
+                    imports: vec![import("C")],
+                    definitions: vec![definition("funB1")],
+                    ..Parsed::default()
+                }
+            ),
+            (
+                "C".into(),
+                Parsed {
+                    definitions: vec![definition("funC1")],
+                    ..Parsed::default()
+                }
+            ),
+        ].into_iter().collect();
+
+        let mut emitter = VecEmitter::new();
+        analyze(
+            &files,
+            &ConfigFile::default(),
+            &mut Emitter::new(&mut emitter, lint::Config::default())
+        ).unwrap();
+
+        let unused_import_lints: Vec<_> = emitter.emitted_items
+            .into_iter()
+            .filter(|item| item.lint == Lint::UnusedImports)
+            .collect();
+        assert_eq!(unused_import_lints.len(), 1);
+    }
+
+    #[test]
+    fn test_unused_imports_complex() {
+        /*
+            Arrows signify imports
+
+            file_A: uses bar() --> file_B: defines bar{} --> file_C: defines foo{}
+                                   ^  ^
+            file_D: uses foo() ---/  /
+                                    /
+            file_E: uses nothing --/
+
+            We expect that:
+            * file_B complains about unused import file_C and
+            * file_E complains about unused import file_B.
+        */
+        let files = vec![
+            ( "file_A".into(), Parsed {
+                    imports: vec![import("file_B")],
+                    usages: vec![usage("bar"),],
+                    ..Parsed::default() }),
+            ( "file_B".into(), Parsed {
+                    imports: vec![import("file_C")],
+                    definitions: vec![definition("bar")],
+                    ..Parsed::default()
+                }),
+            ( "file_C".into(), Parsed {
+                    definitions: vec![definition("foo")],
+                    ..Parsed::default()
+                }),
+            ( "file_D".into(), Parsed {
+                    imports: vec![import("file_B")],
+                    usages: vec![usage("foo"),],
+                    ..Parsed::default()
+                }),
+            ( "file_E".into(), Parsed {
+                    imports: vec![import("file_B")],
+                    ..Parsed::default()
+                }),
+        ].into_iter().collect();
+
+        let mut emitter = VecEmitter::new();
+        analyze(
+            &files,
+            &ConfigFile::default(),
+            &mut Emitter::new(&mut emitter, lint::Config::default())
+        ).unwrap();
+
+        let unused_import_lints: Vec<_> = emitter.emitted_items
+            .into_iter()
+            .filter(|item| item.lint == Lint::UnusedImports)
+            .collect();
+        assert_eq!(unused_import_lints.len(), 2);
     }
 
     #[test]
@@ -361,7 +506,7 @@ mod test {
                 Parsed {
                     usages: vec![usage("MyFunB")],
                     definitions: vec![definition("MyFunA")],
-                    imports: vec!["file_A".into()],
+                    imports: vec![import("file_A")],
                     ..Parsed::default()
                 }
             ),
@@ -369,7 +514,7 @@ mod test {
                 "file_C".into(),
                 Parsed {
                     usages: vec![usage("MyFunB"), usage("myFunA")],
-                    imports: vec!["file_B".into()],
+                    imports: vec![import("file_B")],
                     ..Parsed::default()
                 }
             ),
@@ -387,4 +532,34 @@ mod test {
             .collect();
         assert_eq!(invalid_casing_lints.len(), 3);
     }
+
+    #[test]
+    fn test_detects_unused_imports() {
+        let files = vec![
+            (
+                "file_A".into(),
+                Parsed {
+                    definitions: vec![definition("foo")],
+                    ..Parsed::default()
+                }
+            ),
+            (
+                "file_B".into(),
+                Parsed {
+                    imports: vec![import("file_A")],
+                    ..Parsed::default()
+                }
+            ),
+        ].into_iter().collect();
+
+        let mut emitter = VecEmitter::new();
+        analyze(
+            &files,
+            &ConfigFile::default(),
+            &mut Emitter::new(&mut emitter, lint::Config::default())
+        ).unwrap();
+        assert_eq!(emitter.emitted_items.len(), 1);
+        assert_eq!(emitter.emitted_items[0].lint, Lint::UnusedImports);
+    }
+
 }
