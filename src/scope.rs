@@ -35,7 +35,7 @@ impl Config {
 /// Functions in scope
 #[derive(Debug, Clone)]
 pub struct Scope<'a> {
-    /// Functions defined in this scope
+    /// All the functions in scope
     items: Map<UniCase<&'a str>, Item<'a>>,
 
     /// Files directly imported by `.`
@@ -67,8 +67,6 @@ pub enum Found {
 }
 
 impl<'a> Scope<'a> {
-    // I have no idea why 'a annotation on `name` is required.
-    // TODO investigate
     pub fn search(&self, name: &str) -> Option<(Found, &'a str)> {
         let case_insensitive_name = UniCase::new(name);
 
