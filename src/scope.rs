@@ -48,7 +48,7 @@ pub struct Scope<'a> {
 /// A function, class etc. defined in some file
 /// (currently only a function)
 #[derive(Debug, Copy, Clone)]
-struct Item<'a> {
+pub struct Item<'a> {
     /// Canonical path to a file containing the definition
     origin: &'a Path,
 
@@ -67,19 +67,17 @@ pub enum Found {
 }
 
 impl<'a> Scope<'a> {
-    pub fn search(&self, name: &str) -> Option<(Found, &'a str)> {
+    pub fn search(&self, name: &str) -> Option<(Found, Item<'a>)> {
         let case_insensitive_name = UniCase::new(name);
 
         match self.items.get(&case_insensitive_name) {
-            Some(&Item { origin, name: original_name }) => {
-                let directness =
-                    if origin == self.current_file || self.direct_imports.contains(origin) {
-                        Found::Direct
-                    } else {
-                        Found::Indirect
-                    };
-
-                Some((directness, original_name))
+            Some(item) => {
+                if item.origin == self.current_file
+                || self.direct_imports.contains(item.origin) {
+                    Some((Found::Direct, *item))
+                } else {
+                    Some((Found::Indirect, *item))
+                }
             }
             None => None
         }
@@ -148,8 +146,8 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                 }
                 _ => ()
             }
-            if let Some((_, original_name)) = search_result {
-                if usage.name != original_name {
+            if let Some((_, item)) = search_result {
+                if usage.name != item.name {
                     usage.location.in_file(&parsed.original_path)
                         .lint(Lint::InvalidLetterCasing, "Function name differs between usage and definition")
                         .note(format!("Check whether the letter casing is the same"))
