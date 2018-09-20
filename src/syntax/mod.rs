@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::cmp::Ordering;
 
 use regex::Regex;
 
@@ -26,21 +25,9 @@ pub struct Line {
 /// A `.` import
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Import {
-    pub resolved_import: Option<PathBuf>,
     pub location: Line,
     pub importee: Importee,
 }
-impl Ord for Import {
-    fn cmp(&self, other: &Import) -> Ordering {
-        self.location.no.cmp(&other.location.no)
-    }
-}
-impl PartialOrd for Import {
-    fn partial_cmp(&self, other: &Import) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
 
 /// An importee pointed by `.` import
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -156,7 +143,6 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
             };
 
             imports.push(Import {
-                resolved_import: None,
                 location: get_location(),
                 importee,
             })

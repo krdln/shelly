@@ -10,7 +10,6 @@ use lint::Emitter;
 use lint::Lint;
 use preprocess::Parsed;
 use ConfigFile;
-use syntax;
 
 struct Config {
     custom_cmdlets: Set<UniCase<String>>,
@@ -48,7 +47,7 @@ pub struct Scope<'a> {
     directly_imported_or_defined: Set<UniCase<&'a str>>,
     /// Directly imported definitions grouped by file. This introduces denormalized
     /// data between directly_imported and this field.
-    definitions_per_import: Map<&'a syntax::Import, Set<UniCase<&'a str>>>,
+    definitions_per_import: Map<&'a Path, Set<UniCase<&'a str>>>,
 }
 
 /// Type of function found in scope
@@ -123,8 +122,8 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                 }
             }
             if !something_imported_is_used {
-                import.location.in_file(&parsed.original_path)
-                    .lint(Lint::UnusedImports, format!("Unused import: {}", import.location.line))
+                parsed.imports[*import].location.in_file(&parsed.original_path)
+                    .lint(Lint::UnusedImports, "Unused import")
                     .emit(emitter);
             }
         }
@@ -205,20 +204,15 @@ fn get_scope<'a>(
 
     let mut scope = Scope::default();
 
-    for import in &parsed_file.imports {
-        match &import.resolved_import {
-            None => (),
-            Some(res) => {
-                let nested = get_scope(res, files, scopes)?;
-                scope.directly_imported.extend(&nested.defined);
-                scope.directly_imported_or_defined.extend(&nested.defined);
-                scope.all.extend(&nested.all);
-                scope.files.extend(&nested.files);
+    for imported_file in parsed_file.imports.keys() {
+        let nested = get_scope(imported_file, files, scopes)?;
+        scope.directly_imported.extend(&nested.defined);
+        scope.directly_imported_or_defined.extend(&nested.defined);
+        scope.all.extend(&nested.all);
+        scope.files.extend(&nested.files);
 
-                let all_imported = nested.defined.union(&nested.directly_imported).cloned().collect();
-                scope.definitions_per_import.insert(import, all_imported);
-            }
-        }
+        let all_imported = nested.defined.union(&nested.directly_imported).cloned().collect();
+        scope.definitions_per_import.insert(imported_file, all_imported);
     }
 
     for definition in &parsed_file.definitions {
@@ -242,6 +236,13 @@ mod test {
     use lint;
     use super::*;
 
+    /// A helper macro for initializing different collections than a vec.
+    macro_rules! collect {
+        ( $( $keyval:expr ),* $(,)* ) => {
+            vec![$($keyval),*].into_iter().collect()
+        };
+    }
+
     fn usage(fun: &str) -> Usage {
         Usage {
             location: Line { line: fun.to_owned(), no: 1 },
@@ -256,12 +257,14 @@ mod test {
         }
     }
 
-    fn import(relpath: &str) -> Import {
-        Import {
-            location: Line { line: format!(". $PSScriptRoot/{}", relpath), no: 1 },
-            importee: Importee::Relative(relpath.into()),
-            resolved_import: Some(PathBuf::from(relpath)),
-        }
+    fn import(relpath: &str) -> (PathBuf, Import) {
+        (
+            PathBuf::from(relpath),
+            Import {
+                location: Line { line: format!(". $PSScriptRoot/{}", relpath), no: 1 },
+                importee: Importee::Relative(relpath.into()),
+            }
+        )
     }
 
     #[test]
@@ -270,7 +273,7 @@ mod test {
             (
                 "A".into(),
                 Parsed {
-                    imports: vec![import("B")],
+                    imports: collect![import("B")],
                     usages: vec![usage("funA1"), usage("funB1")],
                     definitions: vec![definition("funA1")],
                     ..Parsed::default()
@@ -298,8 +301,8 @@ mod test {
     #[test]
     fn test_loop() {
         let files = vec![
-            ("A".into(), Parsed { imports: vec![import("B")], ..Parsed::default() }),
-            ("B".into(), Parsed { imports: vec![import("A")], ..Parsed::default() }),
+            ("A".into(), Parsed { imports: collect![import("B")], ..Parsed::default() }),
+            ("B".into(), Parsed { imports: collect![import("A")], ..Parsed::default() }),
         ].into_iter().collect();
 
         let mut emitter = VecEmitter::new();
@@ -337,14 +340,14 @@ mod test {
                 "A".into(),
                 Parsed {
                     usages: vec![usage("funC1")],
-                    imports: vec![import("B")],
+                    imports: collect![import("B")],
                     ..Parsed::default()
                 }
             ),
             (
                 "B".into(),
                 Parsed {
-                    imports: vec![import("C")],
+                    imports: collect![import("C")],
                     // we must use something from C, otherwise unused-imports will complain
                     usages: vec![usage("funC2")],
                     ..Parsed::default()
@@ -378,14 +381,14 @@ mod test {
                 "A".into(),
                 Parsed {
                     usages: vec![usage("funB1"), usage("funC1")],
-                    imports: vec![import("B")],
+                    imports: collect![import("B")],
                     ..Parsed::default()
                 }
             ),
             (
                 "B".into(),
                 Parsed {
-                    imports: vec![import("C")],
+                    imports: collect![import("C")],
                     definitions: vec![definition("funB1")],
                     ..Parsed::default()
                 }
@@ -430,11 +433,11 @@ mod test {
         */
         let files = vec![
             ( "file_A".into(), Parsed {
-                    imports: vec![import("file_B")],
+                    imports: collect![import("file_B")],
                     usages: vec![usage("bar"),],
                     ..Parsed::default() }),
             ( "file_B".into(), Parsed {
-                    imports: vec![import("file_C")],
+                    imports: collect![import("file_C")],
                     definitions: vec![definition("bar")],
                     ..Parsed::default()
                 }),
@@ -443,12 +446,12 @@ mod test {
                     ..Parsed::default()
                 }),
             ( "file_D".into(), Parsed {
-                    imports: vec![import("file_B")],
+                    imports: collect![import("file_B")],
                     usages: vec![usage("foo"),],
                     ..Parsed::default()
                 }),
             ( "file_E".into(), Parsed {
-                    imports: vec![import("file_B")],
+                    imports: collect![import("file_B")],
                     ..Parsed::default()
                 }),
         ].into_iter().collect();
@@ -506,7 +509,7 @@ mod test {
                 Parsed {
                     usages: vec![usage("MyFunB")],
                     definitions: vec![definition("MyFunA")],
-                    imports: vec![import("file_A")],
+                    imports: collect![import("file_A")],
                     ..Parsed::default()
                 }
             ),
@@ -514,7 +517,7 @@ mod test {
                 "file_C".into(),
                 Parsed {
                     usages: vec![usage("MyFunB"), usage("myFunA")],
-                    imports: vec![import("file_B")],
+                    imports: collect![import("file_B")],
                     ..Parsed::default()
                 }
             ),
@@ -546,7 +549,7 @@ mod test {
             (
                 "file_B".into(),
                 Parsed {
-                    imports: vec![import("file_A")],
+                    imports: collect![import("file_A")],
                     ..Parsed::default()
                 }
             ),

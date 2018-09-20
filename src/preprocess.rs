@@ -1,5 +1,6 @@
 use failure::Error;
 
+use std::collections::BTreeMap as Map;
 use std::path::{Path, PathBuf};
 use std::fs;
 
@@ -12,7 +13,7 @@ use Line;
 /// Parsed and preprocessed source file
 #[derive(Debug, Default)]
 pub struct Parsed {
-    pub imports: Vec<syntax::Import>,
+    pub imports: Map<PathBuf, syntax::Import>,
     pub definitions: Vec<syntax::Definition>,
     pub usages: Vec<syntax::Usage>,
     pub testcases: Vec<syntax::Testcase>,
@@ -68,12 +69,13 @@ pub fn parse_and_preprocess(path: &Path, run_opt: &RunOpt, emitter: &mut Emitter
 /// Verifies imports and canonicalizes their paths
 ///
 /// Returns None if any of imports were not recognized
-fn resolve_imports(source_path: &Path, mut imports: Vec<syntax::Import>, emitter: &mut Emitter)
-    -> Result<Option<Vec<syntax::Import>>, Error>
+fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &mut Emitter)
+    -> Result<Option<Map<PathBuf, syntax::Import>>, Error>
 {
     let mut import_error = false;
+    let mut resolved_imports = Map::new();
 
-    for import in &mut imports {
+    for import in imports {
         use syntax::Importee;
 
         let dir = source_path.parent().unwrap();
@@ -99,9 +101,8 @@ fn resolve_imports(source_path: &Path, mut imports: Vec<syntax::Import>, emitter
         };
 
         if dest_path.exists() {
-            import.resolved_import = Some(dest_path.canonicalize()?);
+            resolved_imports.insert(dest_path.canonicalize()?, import);
         } else {
-            import.resolved_import = None;
             import_error = true;
 
             import.location.in_file(source_path)
@@ -115,6 +116,6 @@ fn resolve_imports(source_path: &Path, mut imports: Vec<syntax::Import>, emitter
         return Ok(None)
     }
 
-    Ok(Some(imports))
+    Ok(Some(resolved_imports))
 }
 

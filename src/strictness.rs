@@ -35,13 +35,8 @@ pub fn analyze<'a>(
     let mut importees: Set<&Path> = Set::new();
 
     for parsed in files.values() {
-        for importee in &parsed.imports {
-            match &importee.resolved_import {
-                None => (),
-                Some(res) => {
-                    importees.insert(res);
-                }
-            }
+        for importee in parsed.imports.keys() {
+            importees.insert(importee);
         }
     }
 
