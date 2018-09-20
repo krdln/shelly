@@ -105,7 +105,7 @@ lints!{
     SyntaxErrors: "syntax-errors" => Warn,
 
     /// File was imported but no direct definitions from it are being used
-    UnusedImports: "unused-imports" => Deny,
+    UnusedImports: "unused-imports" => Warn,
 }
 
 impl fmt::Display for UnknownLint {
