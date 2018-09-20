@@ -33,47 +33,51 @@ impl Config {
 }
 
 /// Functions in scope
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Scope<'a> {
-    /// Functions defined in this scope
-    defined: Set<UniCase<&'a str>>,
-    /// Defined by a file imported by `.`
-    directly_imported: Set<UniCase<&'a str>>,
     /// All the functions in scope
-    pub all: Set<UniCase<&'a str>>,
-    /// All the files imported (directly and indirectly)
-    files: Set<&'a Path>,
-    /// All defined or directly imported functions
-    directly_imported_or_defined: Set<UniCase<&'a str>>,
-    /// Directly imported definitions grouped by file. This introduces denormalized
-    /// data between directly_imported and this field.
-    definitions_per_import: Map<&'a Path, Set<UniCase<&'a str>>>,
+    items: Map<UniCase<&'a str>, Item<'a>>,
+
+    /// Files directly imported by `.`
+    direct_imports: Set<&'a Path>,
+
+    /// Current file
+    current_file: &'a Path,
+}
+
+/// A function, class etc. defined in some file
+/// (currently only a function)
+#[derive(Debug, Copy, Clone)]
+pub struct Item<'a> {
+    /// Canonical path to a file containing the definition
+    origin: &'a Path,
+
+    /// Original name of the item
+    name: &'a str,
 }
 
 /// Type of function found in scope
 #[derive(Debug)]
-enum Found {
-    /// Found in Scope::defined or Scope::indirectly_imported
+pub enum Found {
+    /// Found in current file or directly imported files
     Direct,
+
     /// Indirectly imported (through multiple layers of `.`)
     Indirect,
 }
 
 impl<'a> Scope<'a> {
-    // I have no idea why 'a annotation on `name` is required.
-    // TODO investigate
-    fn search(&self, name: &'a str) -> Option<(Found, &'a str)> {
+    pub fn search(&self, name: &str) -> Option<(Found, Item<'a>)> {
         let case_insensitive_name = UniCase::new(name);
 
-        match self.all.get(&case_insensitive_name) {
-            Some(original_name) => {
-                let directness = if self.directly_imported_or_defined.contains(&case_insensitive_name) {
-                    Found::Direct
+        match self.items.get(&case_insensitive_name) {
+            Some(item) => {
+                if item.origin == self.current_file
+                || self.direct_imports.contains(item.origin) {
+                    Some((Found::Direct, *item))
                 } else {
-                    Found::Indirect
-                };
-
-                Some((directness, original_name))
+                    Some((Found::Indirect, *item))
+                }
             }
             None => None
         }
@@ -106,27 +110,11 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
 
     let mut scopes = Map::new();
 
-    for path in files.keys() {
+    for (path, parsed) in files {
         let scope = get_scope(path, files, &mut scopes)?;
 
-        let parsed = &files[path];
-
         let mut already_analyzed = Set::new();
-
-        for (import, definitions) in &scope.definitions_per_import {
-            let mut something_imported_is_used = false;
-            for usage in &parsed.usages {
-                if definitions.contains(&UniCase::new(&usage.name)) {
-                    something_imported_is_used = true;
-                    break;
-                }
-            }
-            if !something_imported_is_used {
-                parsed.imports[*import].location.in_file(&parsed.original_path)
-                    .lint(Lint::UnusedImports, "Unused import")
-                    .emit(emitter);
-            }
-        }
+        let mut used_imports = Set::new();
 
         for usage in &parsed.usages {
             if BUILTINS.contains(&UniCase::new(&usage.name)) {
@@ -157,13 +145,23 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                 }
                 _ => ()
             }
-            if let Some((_, original_name)) = search_result {
-                if usage.name != original_name {
+            if let Some((_, item)) = search_result {
+                used_imports.insert(item.origin);
+
+                if usage.name != item.name {
                     usage.location.in_file(&parsed.original_path)
                         .lint(Lint::InvalidLetterCasing, "Function name differs between usage and definition")
                         .note(format!("Check whether the letter casing is the same"))
                         .emit(emitter);
                 }
+            }
+        }
+
+        for (imported_file, import) in &parsed.imports {
+            if !used_imports.contains(&**imported_file) {
+                import.location.in_file(&parsed.original_path)
+                    .lint(Lint::UnusedImports, "Unused import")
+                    .emit(emitter);
             }
         }
     }
@@ -202,26 +200,24 @@ fn get_scope<'a>(
         )
     })?;
 
-    let mut scope = Scope::default();
+    let mut scope = Scope {
+        items: Map::new(),
+        direct_imports: Set::new(),
+        current_file: file,
+    };
 
-    for imported_file in parsed_file.imports.keys() {
-        let nested = get_scope(imported_file, files, scopes)?;
-        scope.directly_imported.extend(&nested.defined);
-        scope.directly_imported_or_defined.extend(&nested.defined);
-        scope.all.extend(&nested.all);
-        scope.files.extend(&nested.files);
-
-        let all_imported = nested.defined.union(&nested.directly_imported).cloned().collect();
-        scope.definitions_per_import.insert(imported_file, all_imported);
+    for import in parsed_file.imports.keys() {
+        scope.direct_imports.insert(import);
+        let nested = get_scope(&import, files, scopes)?;
+        scope.items.extend(&nested.items);
     }
 
     for definition in &parsed_file.definitions {
-        scope.defined.insert(UniCase::new(&definition.name));
-        scope.all.insert(UniCase::new(&definition.name));
-        scope.directly_imported_or_defined.insert(UniCase::new(&definition.name));
+        scope.items.insert(
+            UniCase::new(&definition.name),
+            Item { name: &definition.name, origin: file },
+        );
     }
-
-    scope.files.insert(file);
 
     scopes.insert(file, ScopeWip::Resolved(scope.clone()));
 

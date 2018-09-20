@@ -2,8 +2,6 @@ use std::collections::BTreeSet as Set;
 use std::collections::BTreeMap as Map;
 use std::path::{Path, PathBuf};
 
-use unicase::UniCase;
-
 use lint::Emitter;
 use lint::Lint;
 use Location;
@@ -45,7 +43,7 @@ pub fn analyze<'a>(
     let root_files: Set<&Path> = all_files.difference(&importees).cloned().collect();
 
     for &file in &root_files {
-        if !scopes[file].all.contains(&UniCase::new(STRICT_MODE_PSEUDOITEM_NAME)) {
+        if scopes[file].search(STRICT_MODE_PSEUDOITEM_NAME).is_none() {
             Location::whole_file(&files[file].original_path)
                 .lint(Lint::NoStrictMode, "Strict mode not enabled for this file")
                 .emit(emitter);
