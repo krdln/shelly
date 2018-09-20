@@ -114,7 +114,7 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
         let scope = get_scope(path, files, &mut scopes)?;
 
         let mut already_analyzed = Set::new();
-        let mut used_imports = Set::new();
+        let mut used_dependencies: Set<&Path> = Set::new();
 
         for usage in &parsed.usages {
             if BUILTINS.contains(&UniCase::new(&usage.name)) {
@@ -137,30 +137,55 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                         .what(usage.name.clone())
                         .emit(emitter);
                 }
-                Some((Found::Indirect, _)) => {
+                Some((Found::Indirect, item)) => {
+                    let imported_through = parsed.imports
+                        .keys()
+                        .find(|imported_file| {
+                            get_cached_scope(imported_file, &scopes)
+                                .search(&usage.name)
+                                .is_some()
+                        })
+                        .unwrap_or_else(|| unreachable!());
+
+                    used_dependencies.insert(imported_through);
+
                     usage.location.in_file(&parsed.original_path)
                         .lint(Lint::IndirectImports, format!("Indirectly imported: {}", usage.name))
                         .what(usage.name.clone())
+                        .note(format!(
+                            "Indirectly imported through {}",
+                            files[imported_through].original_path.display()
+                        ))
+                        .note(format!(
+                            "Consider directly importing {}",
+                            files[item.origin].original_path.display()
+                        ))
                         .emit(emitter);
                 }
                 _ => ()
             }
             if let Some((_, item)) = search_result {
-                used_imports.insert(item.origin);
+                used_dependencies.insert(item.origin);
 
                 if usage.name != item.name {
                     usage.location.in_file(&parsed.original_path)
                         .lint(Lint::InvalidLetterCasing, "Function name differs between usage and definition")
-                        .note(format!("Check whether the letter casing is the same"))
+                        .note("Check whether the letter casing is the same")
                         .emit(emitter);
                 }
             }
         }
 
+        // TODO perhaps we can move this check out of scope
+        // analysis to its own module? That would require
+        // scope analysis to save some info.
         for (imported_file, import) in &parsed.imports {
-            if !used_imports.contains(&**imported_file) {
+            if !used_dependencies.contains(&**imported_file) {
                 import.location.in_file(&parsed.original_path)
-                    .lint(Lint::UnusedImports, "Unused import")
+                    .lint(
+                        Lint::UnusedImports,
+                        format!("Unused import of {}", files[imported_file].original_path.display())
+                    )
                     .emit(emitter);
             }
         }
@@ -180,6 +205,20 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
     Ok(scopes)
 }
 
+/// Gets a scope for a file, panics if not computed yet
+fn get_cached_scope<'a>(
+    file: &Path,
+    scopes: &'a Map<&'a Path, ScopeWip<'a>>
+) -> &'a Scope<'a> {
+    match scopes.get(file).expect("nonexisting cached scope") {
+        ScopeWip::Resolved(scope) => scope,
+        ScopeWip::Current         => panic!("scope cached but WIP"),
+    }
+}
+
+/// Computes or retrieves a Scope for a file,
+/// errors on recursive or out-of-tree imports.
+/// Caches the computed Scope in the `scopes` cache.
 fn get_scope<'a>(
     file: &'a Path,
     files: &'a Map<PathBuf, Parsed>,
