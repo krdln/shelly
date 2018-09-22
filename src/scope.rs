@@ -190,7 +190,7 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                 {
                     // Temporarily silence unused-imports for files with no functions
                     // to avoid false positives.
-                    // TODO Make the parser understand the world beyound functions
+                    // TODO Make the parser understand the world beyond functions
                     // and reenable the lint.
                     continue;
                 }
