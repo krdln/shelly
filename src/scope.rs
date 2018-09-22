@@ -181,13 +181,7 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
         // scope analysis to save some info.
         for (imported_file, import) in &parsed.imports {
             if !used_dependencies.contains(&**imported_file) {
-                if files[imported_file]
-                        .definitions
-                        .iter()
-                        .filter(|def| !def.name.starts_with("!")) // skip pseudoitems
-                        .next()
-                        .is_none()
-                {
+                if files[imported_file].functions().next().is_none() {
                     // Temporarily silence unused-imports for files with no functions
                     // to avoid false positives.
                     // TODO Make the parser understand the world beyond functions
