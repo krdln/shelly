@@ -103,6 +103,9 @@ lints!{
 
     /// Shelly couldn't parse this syntax
     SyntaxErrors: "syntax-errors" => Warn,
+
+    /// File was imported but no direct definitions from it are being used
+    UnusedImports: "unused-imports" => Warn,
 }
 
 impl fmt::Display for UnknownLint {

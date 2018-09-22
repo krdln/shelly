@@ -1,5 +1,6 @@
 use failure::Error;
 
+use std::collections::BTreeMap as Map;
 use std::path::{Path, PathBuf};
 use std::fs;
 
@@ -12,7 +13,7 @@ use Line;
 /// Parsed and preprocessed source file
 #[derive(Debug, Default)]
 pub struct Parsed {
-    pub imports: Vec<PathBuf>,
+    pub imports: Map<PathBuf, syntax::Import>,
     pub definitions: Vec<syntax::Definition>,
     pub usages: Vec<syntax::Usage>,
     pub testcases: Vec<syntax::Testcase>,
@@ -69,10 +70,10 @@ pub fn parse_and_preprocess(path: &Path, run_opt: &RunOpt, emitter: &mut Emitter
 ///
 /// Returns None if any of imports were not recognized
 fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &mut Emitter)
-    -> Result<Option<Vec<PathBuf>>, Error>
+    -> Result<Option<Map<PathBuf, syntax::Import>>, Error>
 {
     let mut import_error = false;
-    let mut resolved_imports = Vec::new();
+    let mut resolved_imports = Map::new();
 
     for import in imports {
         use syntax::Importee;
@@ -81,7 +82,7 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
         let filename = source_path.file_name().unwrap().to_str().unwrap();
 
         let dest_path = match import.importee {
-            Importee::Relative(relative_path) => dir.join(relative_path),
+            Importee::Relative(ref relative_path) => dir.join(relative_path),
             Importee::HereSut => dir.join(filename.replace(".Tests", "")),
             Importee::Unrecognized(_) => {
                 // Should we treat unrecognized import as an error also?
@@ -100,7 +101,7 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
         };
 
         if dest_path.exists() {
-            resolved_imports.push(dest_path.canonicalize()?)
+            resolved_imports.insert(dest_path.canonicalize()?, import);
         } else {
             import_error = true;
 
@@ -116,5 +117,19 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
     }
 
     Ok(Some(resolved_imports))
+}
+
+impl Parsed {
+    pub fn functions(&self) -> impl Iterator<Item=&syntax::Definition> {
+        // Currently all definitions are functions, except the
+        // pseudoitems, whose names begin with `!`.
+        // Pseudoitems are items that are propaged similarly to normal
+        // definitions, but they're created by some part of analysis.
+        // Eg. we have "uses strict mode" pseudoitem, that gets injected
+        // on "Set-StrictMode" and propagates to downstream files.
+        self.definitions
+            .iter()
+            .filter(|def| !def.name.starts_with("!"))
+    }
 }
 

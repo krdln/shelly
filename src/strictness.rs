@@ -33,7 +33,7 @@ pub fn analyze<'a>(
     let mut importees: Set<&Path> = Set::new();
 
     for parsed in files.values() {
-        for importee in &parsed.imports {
+        for importee in parsed.imports.keys() {
             importees.insert(importee);
         }
     }

@@ -16,21 +16,21 @@ pub struct File {
 }
 
 /// A source file's line with its location
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Line {
     pub line: String,
     pub no: u32,
 }
 
 /// A `.` import
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Import {
     pub location: Line,
     pub importee: Importee,
 }
 
 /// An importee pointed by `.` import
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Importee {
     /// `$PSScriptRoot/...`
     Relative(PathBuf),
