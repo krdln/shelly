@@ -158,7 +158,7 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
     let mut imports = Vec::new();
     let mut testcases = Vec::new();
 
-    v2::traverse_streams(&token_tree_stream, |stream| {
+    v2::traverse_streams(&token_tree_stream, |stream, _| {
         let mut is_function_definition = false;
         let mut iter = stream.iter();
         while let Some(tt) = iter.next() {
