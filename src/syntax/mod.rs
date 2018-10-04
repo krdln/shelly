@@ -283,6 +283,9 @@ fn test_basics() {
         Describe "something" {
             It "works" {}
         }
+
+        class Car {}
+        [Boat] $Foo = 5
     "#;
 
     let parsed = parse(source, false).unwrap();
@@ -295,10 +298,14 @@ fn test_basics() {
 
     assert_eq!(parsed.definitions[0].item.name, "Foo");
     assert_eq!(parsed.definitions[1].item.name, "Bar");
+    assert_eq!(parsed.definitions[2].item.as_ref(), Item::class("Car"));
 
     assert_eq!(parsed.usages[0].item.name, "Fooize-Bar");
     assert_eq!(parsed.usages[1].item.name, "Write-Host");
     assert_eq!(parsed.usages[2].item.name, "Write-Log");
+    assert_eq!(parsed.usages[3].item.as_ref(), Item::function("Describe"));
+    assert_eq!(parsed.usages[4].item.as_ref(), Item::function("It"));
+    assert_eq!(parsed.usages[5].item.as_ref(), Item::class("Boat"));
 
     assert_eq!(parsed.testcases[0].name, "works");
 }
