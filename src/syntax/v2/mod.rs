@@ -18,12 +18,13 @@
 
 mod muncher;
 use self::muncher::Muncher;
-use self::muncher::{Span, Location};
+pub use self::muncher::{Span, Location};
 
 mod stage1;
 mod stage2;
 pub use self::stage2::traverse_streams;
 pub use self::stage2::TokenTree;
+pub use self::stage2::Delimiter;
 
 mod stream;
 

@@ -299,10 +299,24 @@ mod test {
         }
     }
 
+    fn class_usage(class: &str) -> Usage {
+        Usage {
+            location: Line { line: class.to_owned(), no: 1 },
+            item: Item::class(class.to_owned()),
+        }
+    }
+
     fn definition(fun: &str) -> Definition {
         Definition {
             location: Line { line: fun.to_owned(), no: 1 },
             item: Item::function(fun.to_owned()),
+        }
+    }
+
+    fn class_definition(class: &str) -> Definition {
+        Definition {
+            location: Line { line: class.to_owned(), no: 1 },
+            item: Item::class(class.to_owned()),
         }
     }
 
@@ -614,4 +628,35 @@ mod test {
         assert_eq!(emitter.emitted_items[0].lint, Lint::UnusedImports);
     }
 
+    #[test]
+    fn test_using_classes_marks_import_as_used() {
+        let files = vec![
+            (
+                "file_A".into(),
+                Parsed {
+                    definitions: vec![
+                        definition("foo"),
+                        class_definition("Car"),
+                    ],
+                    ..Parsed::default()
+                }
+            ),
+            (
+                "file_B".into(),
+                Parsed {
+                    imports: collect![import("file_A")],
+                    usages: vec![class_usage("Car")],
+                    ..Parsed::default()
+                }
+            ),
+        ].into_iter().collect();
+
+        let mut emitter = VecEmitter::new();
+        analyze(
+            &files,
+            &ConfigFile::default(),
+            &mut Emitter::new(&mut emitter, lint::Config::default())
+        ).unwrap();
+        assert_eq!(emitter.emitted_items.len(), 0);
+    }
 }

@@ -4,6 +4,7 @@ use regex::Regex;
 use unicase::UniCase;
 
 mod v2;
+use self::v2::Span;
 pub use self::v2::Error;
 pub use self::v2::Result;
 
@@ -21,6 +22,15 @@ pub struct File {
 pub struct Line {
     pub line: String,
     pub no: u32,
+}
+
+impl Line {
+    fn from_span(span: Span, source: &str) -> Line {
+        Line {
+            line: span.start.find_line(source).to_owned(),
+            no:   span.start.line,
+        }
+    }
 }
 
 /// A `.` import
@@ -158,16 +168,14 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
     let mut imports = Vec::new();
     let mut testcases = Vec::new();
 
+    // Gather function definitions and usages
     v2::traverse_streams(&token_tree_stream, |stream, _| {
         let mut is_function_definition = false;
         let mut iter = stream.iter();
         while let Some(tt) = iter.next() {
             match *tt {
                 v2::TokenTree::Cmdlet { span, ident } => {
-                    let location = Line {
-                        line: span.start.find_line(source).to_owned(),
-                        no:   span.start.line,
-                    };
+                    let location = Line::from_span(span, source);
                     let name = ident.cut_from(source).to_owned();
 
                     if is_function_definition {
@@ -185,6 +193,32 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
                 v2::TokenTree::FunctionKeyword { .. } => true,
                 _                                     => false,
             };
+        }
+    });
+
+    // Gather class definitions and usages
+    v2::traverse_streams(&token_tree_stream, |stream, delim| {
+        match (stream, delim) {
+            // TODO: stop representing class names as "fields".
+            (&[v2::TokenTree::Field { span, ident }], Some(v2::Delimiter::Bracket)) => {
+                // This is just a heuristic – not every [<word in brackets>] is necessarily
+                // a class name. But every usage of a class name should be of such form
+                let location = Line::from_span(span, source);
+                let name = ident.cut_from(source).to_owned();
+                usages.push(Usage { location, item: Item::class(name) });
+            }
+            _ => {}
+        }
+
+        for window in stream.windows(2) {
+            match window {
+                &[v2::TokenTree::ClassKeyword { .. }, v2::TokenTree::Field { span, ident }] => {
+                    let location = Line::from_span(span, source);
+                    let name = ident.cut_from(source).to_owned();
+                    definitions.push(Definition { location, item: Item::class(name) });
+                }
+                _ => {}
+            }
         }
     });
 
