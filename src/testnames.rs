@@ -4,13 +4,14 @@ use std::path::PathBuf;
 use lint::Lint;
 use lint::Emitter;
 use preprocess::Parsed;
+use syntax::Item;
 
 pub fn analyze(files: &Map<PathBuf, Parsed>, emitter: &mut Emitter) {
     let invalid_chars: &[char] = &['"', '>', '<', '|', ':', '*', '?', '\\', '/'];
 
     for file in files.values() {
         let uses_pester_logger = file.usages.iter()
-            .any(|usage| usage.name == "Initialize-PesterLogger");
+            .any(|usage| usage.item.as_ref() == Item::function("Initialize-PesterLogger"));
 
         if !uses_pester_logger {
             continue;

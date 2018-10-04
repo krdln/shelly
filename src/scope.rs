@@ -9,10 +9,12 @@ use std::path::{Path, PathBuf};
 use lint::Emitter;
 use lint::Lint;
 use preprocess::Parsed;
+use syntax;
+use syntax::Item;
 use ConfigFile;
 
 struct Config<'a> {
-    custom_cmdlets: Set<UniCase<&'a str>>,
+    custom_cmdlets: Set<Item<UniCase<&'a str>>>,
 }
 
 impl<'a> Config<'a> {
@@ -22,7 +24,7 @@ impl<'a> Config<'a> {
             .map(|cmdlets|
                 cmdlets
                     .iter()
-                    .map(|cmdlet| UniCase::new(cmdlet.as_str()))
+                    .map(|cmdlet| Item::function(UniCase::new(cmdlet.as_str())))
                     .collect()
             )
             .unwrap_or_else(Set::new);
@@ -35,7 +37,7 @@ impl<'a> Config<'a> {
 #[derive(Debug, Clone)]
 pub struct Scope<'a> {
     /// All the functions in scope
-    items: Map<UniCase<&'a str>, Item<'a>>,
+    items: Map<Item<UniCase<&'a str>>, DefinedItem<'a>>,
 
     /// Files directly imported by `.`
     direct_imports: Set<&'a Path>,
@@ -45,14 +47,13 @@ pub struct Scope<'a> {
 }
 
 /// A function, class etc. defined in some file
-/// (currently only a function)
 #[derive(Debug, Copy, Clone)]
-pub struct Item<'a> {
+pub struct DefinedItem<'a> {
     /// Canonical path to a file containing the definition
     origin: &'a Path,
 
-    /// Original name of the item
-    name: &'a str,
+    /// Original definition of an item
+    definition: &'a syntax::Definition,
 }
 
 /// Type of function found in scope
@@ -66,10 +67,8 @@ pub enum Found {
 }
 
 impl<'a> Scope<'a> {
-    pub fn search(&self, name: &str) -> Option<(Found, Item<'a>)> {
-        let case_insensitive_name = UniCase::new(name);
-
-        match self.items.get(&case_insensitive_name) {
+    pub fn search(&self, item: &Item<&str>) -> Option<(Found, DefinedItem<'a>)> {
+        match self.items.get(&item.as_case_insensitive()) {
             Some(item) => {
                 if item.origin == self.current_file
                 || self.direct_imports.contains(item.origin) {
@@ -98,10 +97,12 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
     -> Result<Map<&'a Path, Scope<'a>>, Error>
 {
     lazy_static! {
-        static ref BUILTINS: Set<UniCase<&'static str>> = include_str!("builtins.txt")
+        static ref BUILTINS: Set<Item<UniCase<&'static str>>> =
+            include_str!("builtins.txt")
             .split_whitespace()
             .chain(include_str!("extras.txt").split_whitespace())
             .map(UniCase::new)
+            .map(Item::function)
             .collect();
     }
 
@@ -116,32 +117,38 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
         let mut used_dependencies: Set<&Path> = Set::new();
 
         for usage in &parsed.usages {
-            if BUILTINS.contains(&UniCase::new(&usage.name)) {
+            let usage_unicase = usage.item.as_case_insensitive();
+
+            if BUILTINS.contains(&usage_unicase) {
                 continue;
             }
-            if config.custom_cmdlets.contains(&UniCase::new(&usage.name)) {
+            if config.custom_cmdlets.contains(&usage_unicase) {
                 continue;
             }
-            if already_analyzed.contains(&UniCase::new(&usage.name)) {
+            if already_analyzed.contains(&usage_unicase) {
                 continue;
             }
 
-            already_analyzed.insert(UniCase::new(&usage.name));
+            already_analyzed.insert(usage_unicase);
 
-            let search_result = scope.search(&usage.name);
+            let search_result = scope.search(&usage.item.as_ref());
             match search_result {
                 None => {
-                    usage.location.in_file(&parsed.original_path)
-                        .lint(Lint::UnknownFunctions, format!("Not in scope: {}", usage.name))
-                        .what(usage.name.clone())
-                        .emit(emitter);
+                    // Don't produce errors for unkown classes yet,
+                    // because their usage us a big heuristic.
+                    if usage.item.is_function() {
+                        usage.location.in_file(&parsed.original_path)
+                            .lint(Lint::UnknownFunctions, format!("Not in scope: {}", usage.name()))
+                            .what(usage.name())
+                            .emit(emitter);
+                    }
                 }
                 Some((Found::Indirect, item)) => {
                     let imported_through = parsed.imports
                         .keys()
                         .find(|imported_file| {
                             get_cached_scope(imported_file, &scopes)
-                                .search(&usage.name)
+                                .search(&usage.item.as_ref())
                                 .is_some()
                         })
                         .unwrap_or_else(|| unreachable!());
@@ -149,8 +156,8 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                     used_dependencies.insert(imported_through);
 
                     usage.location.in_file(&parsed.original_path)
-                        .lint(Lint::IndirectImports, format!("Indirectly imported: {}", usage.name))
-                        .what(usage.name.clone())
+                        .lint(Lint::IndirectImports, format!("Indirectly imported: {}", usage.name()))
+                        .what(usage.name())
                         .note(format!(
                             "Indirectly imported through {}",
                             files[imported_through].original_path.display()
@@ -163,10 +170,10 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                 }
                 _ => ()
             }
-            if let Some((_, item)) = search_result {
-                used_dependencies.insert(item.origin);
+            if let Some((_, defined)) = search_result {
+                used_dependencies.insert(defined.origin);
 
-                if usage.name != item.name {
+                if usage.item != defined.definition.item {
                     usage.location.in_file(&parsed.original_path)
                         .lint(Lint::InvalidLetterCasing, "Function name differs between usage and definition")
                         .note("Check whether the letter casing is the same")
@@ -260,8 +267,8 @@ fn get_scope<'a>(
 
     for definition in &parsed_file.definitions {
         scope.items.insert(
-            UniCase::new(&definition.name),
-            Item { name: &definition.name, origin: file },
+            definition.item.as_case_insensitive(),
+            DefinedItem { definition, origin: file },
         );
     }
 
@@ -288,14 +295,14 @@ mod test {
     fn usage(fun: &str) -> Usage {
         Usage {
             location: Line { line: fun.to_owned(), no: 1 },
-            name: fun.to_owned(),
+            item: Item::function(fun.to_owned()),
         }
     }
 
     fn definition(fun: &str) -> Definition {
         Definition {
             location: Line { line: fun.to_owned(), no: 1 },
-            name: fun.to_owned(),
+            item: Item::function(fun.to_owned()),
         }
     }
 
