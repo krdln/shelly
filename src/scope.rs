@@ -11,19 +11,18 @@ use lint::Lint;
 use preprocess::Parsed;
 use ConfigFile;
 
-struct Config {
-    custom_cmdlets: Set<UniCase<String>>,
+struct Config<'a> {
+    custom_cmdlets: Set<UniCase<&'a str>>,
 }
 
-impl Config {
+impl<'a> Config<'a> {
     fn from_config_file(config_file: &ConfigFile) -> Config {
         let custom_cmdlets = config_file.extras.as_ref()
             .and_then(|extras| extras.cmdlets.as_ref())
             .map(|cmdlets|
                 cmdlets
                     .iter()
-                    .cloned()
-                    .map(|cmdlet| UniCase::new(cmdlet))
+                    .map(|cmdlet| UniCase::new(cmdlet.as_str()))
                     .collect()
             )
             .unwrap_or_else(Set::new);
@@ -120,7 +119,7 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
             if BUILTINS.contains(&UniCase::new(&usage.name)) {
                 continue;
             }
-            if config.custom_cmdlets.contains(&UniCase::new(usage.name.clone())) {
+            if config.custom_cmdlets.contains(&UniCase::new(&usage.name)) {
                 continue;
             }
             if already_analyzed.contains(&UniCase::new(&usage.name)) {
