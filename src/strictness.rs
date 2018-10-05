@@ -49,7 +49,7 @@ pub fn analyze<'a>(
     for &file in &root_files {
         if scopes[file].search(&strict_mode_pseudoitem()).is_none() {
             Location::whole_file(&files[file])
-                .lint(Lint::NoStrictMode, "Strict mode not enabled for this file")
+                .lint(Lint::NoStrictMode, "strict mode not enabled for this file")
                 .emit(emitter);
         }
     }

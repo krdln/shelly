@@ -64,7 +64,7 @@ pub fn parse_and_preprocess(path: &Path, run_opt: &RunOpt, emitter: &mut Emitter
         Err(e)   => {
             e.where_.to_span()
                 .in_file_source(path, Rc::from(source))
-                .lint(Lint::SyntaxErrors, format!("Syntax error: {}", e.what))
+                .lint(Lint::SyntaxErrors, format!("syntax error: {}", e.what))
                 .note(format!("Column {}", e.where_.col))
                 .note("If this is valid PowerShell syntax, please file an issue")
                 .emit(emitter);
@@ -117,7 +117,7 @@ fn resolve_imports(source: &Rc<str>, source_path: &Path, imports: Vec<syntax::Im
                 // import_error = true;
 
                 import.span.in_file_source(source_path, Rc::clone(source))
-                    .lint(Lint::UnrecognizedImports, "Unrecognized import statement")
+                    .lint(Lint::UnrecognizedImports, "unrecognized import statement")
                     .note("Note: Recognized imports are `$PSScriptRoot\\..` or `$here\\$sut`")
                     .emit(emitter);
 
@@ -131,7 +131,7 @@ fn resolve_imports(source: &Rc<str>, source_path: &Path, imports: Vec<syntax::Im
             import_error = true;
 
             import.span.in_file_source(source_path, Rc::clone(source))
-                .lint(Lint::NonexistingImports, "Invalid import")
+                .lint(Lint::NonexistingImports, "invalid import")
                 .note(format!("File not found: {}", dest_path.display()))
                 .emit(emitter);
         }

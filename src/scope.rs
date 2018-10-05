@@ -138,7 +138,7 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                     // because their usage us a big heuristic.
                     if usage.item.is_function() {
                         usage.span.in_file(&parsed)
-                            .lint(Lint::UnknownFunctions, format!("Not in scope: {}", usage.name()))
+                            .lint(Lint::UnknownFunctions, "function not in scope")
                             .what(usage.name())
                             .emit(emitter);
                     }
@@ -156,7 +156,7 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                     used_dependencies.insert(imported_through);
 
                     usage.span.in_file(&parsed)
-                        .lint(Lint::IndirectImports, format!("Indirectly imported: {}", usage.name()))
+                        .lint(Lint::IndirectImports, "indirectly imported")
                         .what(usage.name())
                         .note(format!(
                             "Indirectly imported through {}",
@@ -175,7 +175,7 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
 
                 if usage.item != defined.definition.item {
                     usage.span.in_file(&parsed)
-                        .lint(Lint::InvalidLetterCasing, "Function name differs between usage and definition")
+                        .lint(Lint::InvalidLetterCasing, "function name differs between usage and definition")
                         .note("Check whether the letter casing is the same")
                         .emit(emitter);
                 }
@@ -196,10 +196,7 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                 }
 
                 import.span.in_file(&parsed)
-                    .lint(
-                        Lint::UnusedImports,
-                        format!("Unused import of {}", files[imported_file].original_path.display())
-                    )
+                    .lint(Lint::UnusedImports, "unused import")
                     .emit(emitter);
             }
         }

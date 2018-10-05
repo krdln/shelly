@@ -310,7 +310,7 @@ impl<'e> Emitter<'e> {
                             ),
                             ..message.location.clone()
                         }
-                            .lint(Lint::UnknownLints, format!("Unknown lint: {}", unknown_lint))
+                            .lint(Lint::UnknownLints, "unknown lint")
                             .note("Use `shelly show-lints` to list available lints")
                             .emit(self);
                     }
