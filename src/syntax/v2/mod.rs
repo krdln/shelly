@@ -25,6 +25,7 @@ mod stage2;
 pub use self::stage2::traverse_streams;
 pub use self::stage2::TokenTree;
 pub use self::stage2::Delimiter;
+pub use self::stage2::FileStr;
 
 mod stream;
 
