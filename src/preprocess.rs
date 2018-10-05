@@ -1,6 +1,7 @@
 use failure::Error;
 
 use std::collections::BTreeMap as Map;
+use std::rc::Rc;
 use std::path::{Path, PathBuf};
 use std::fs;
 
@@ -8,18 +9,33 @@ use lint::Lint;
 use lint::Emitter;
 use syntax;
 use RunOpt;
-use Line;
 
 /// Parsed and preprocessed source file
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Parsed {
     pub imports: Map<PathBuf, syntax::Import>,
     pub definitions: Vec<syntax::Definition>,
     pub usages: Vec<syntax::Usage>,
     pub testcases: Vec<syntax::Testcase>,
 
+    pub source: Rc<str>,
+
     /// Original, non-resolved path, relative to PWD. Used for error reporting.
     pub original_path: PathBuf,
+}
+
+// Manual impl of default required because Rc<str> does not impl Default
+impl Default for Parsed {
+    fn default() -> Self {
+        Parsed {
+            imports:       Default::default(),
+            definitions:   Default::default(),
+            usages:        Default::default(),
+            testcases:     Default::default(),
+            original_path: Default::default(),
+            source:        From::from(""),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -38,12 +54,16 @@ pub enum PreprocessOutput {
 pub fn parse_and_preprocess(path: &Path, run_opt: &RunOpt, emitter: &mut Emitter) -> Result<PreprocessOutput, Error> {
     let source = fs::read_to_string(path)?;
 
+    // Strip BOM
+    // TODO move this to muncher after getting rid of regexes in syntax::parse.
+    let source = source.trim_left_matches('\u{feff}');
+
     if run_opt.debug_parser { println!("Trying to parse {}", path.display()); }
     let file = match syntax::parse(&source, run_opt.debug_parser) {
         Ok(file) => file,
         Err(e)   => {
-            Line { line: e.where_.find_line(&source).to_owned(), no: e.where_.line }
-                .in_file(path)
+            e.where_.to_span()
+                .in_file_source(path, Rc::from(source))
                 .lint(Lint::SyntaxErrors, format!("Syntax error: {}", e.what))
                 .note(format!("Column {}", e.where_.col))
                 .note("If this is valid PowerShell syntax, please file an issue")
@@ -52,7 +72,9 @@ pub fn parse_and_preprocess(path: &Path, run_opt: &RunOpt, emitter: &mut Emitter
         }
     };
 
-    let resolved_imports = match resolve_imports(path, file.imports, emitter)? {
+    let source = Rc::from(source);
+
+    let resolved_imports = match resolve_imports(&source, path, file.imports, emitter)? {
         Some(imports) => imports,
         None => return Ok(PreprocessOutput::InvalidImports),
     };
@@ -63,13 +85,16 @@ pub fn parse_and_preprocess(path: &Path, run_opt: &RunOpt, emitter: &mut Emitter
         usages: file.usages,
         testcases: file.testcases,
         original_path: path.to_owned(),
+        source,
     }))
 }
 
 /// Verifies imports and canonicalizes their paths
 ///
 /// Returns None if any of imports were not recognized
-fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &mut Emitter)
+// TODO the `source` argument is weird here.
+// Perhaps the whole in_file_source was a bad idea.
+fn resolve_imports(source: &Rc<str>, source_path: &Path, imports: Vec<syntax::Import>, emitter: &mut Emitter)
     -> Result<Option<Map<PathBuf, syntax::Import>>, Error>
 {
     let mut import_error = false;
@@ -91,7 +116,7 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
                 // "Not in scope" errors later on.
                 // import_error = true;
 
-                import.location.in_file(source_path)
+                import.span.in_file_source(source_path, Rc::clone(source))
                     .lint(Lint::UnrecognizedImports, "Unrecognized import statement")
                     .note("Note: Recognized imports are `$PSScriptRoot\\..` or `$here\\$sut`")
                     .emit(emitter);
@@ -105,7 +130,7 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
         } else {
             import_error = true;
 
-            import.location.in_file(source_path)
+            import.span.in_file_source(source_path, Rc::clone(source))
                 .lint(Lint::NonexistingImports, "Invalid import")
                 .note(format!("File not found: {}", dest_path.display()))
                 .emit(emitter);

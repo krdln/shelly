@@ -17,19 +17,10 @@ pub struct File {
     pub testcases: Vec<Testcase>,
 }
 
-impl Line {
-    fn from_span(span: Span, source: &str) -> Line {
-        Line {
-            line: span.start.find_line(source).to_owned(),
-            no:   span.start.line,
-        }
-    }
-}
-
 /// A `.` import
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Import {
-    pub location: Line,
+    pub span: Span,
     pub importee: Importee,
 }
 
@@ -108,14 +99,14 @@ impl<'a> From<Item<&'a str>> for Item<String> {
 /// Definition of an item
 #[derive(Debug)]
 pub struct Definition {
-    pub location: Line,
+    pub span: Span,
     pub item: Item<String>,
 }
 
 /// Function/commandlet call / usage of a class
 #[derive(Debug)]
 pub struct Usage {
-    pub location: Line,
+    pub span: Span,
     pub item: Item<String>,
 }
 
@@ -126,11 +117,13 @@ impl Usage {
 /// `It` testcase
 #[derive(Debug)]
 pub struct Testcase {
-    pub location: Line,
+    pub span: Span,
     pub name: String,
 }
 
-/// Parses a source file
+/// Parses a source file.
+///
+/// Note: Assumes BOM (byte order mark) is stripped.
 pub fn parse(source: &str, debug: bool) -> Result<File> {
     lazy_static! {
         // TODO rewrite import parsing from regexes to token streams
@@ -152,9 +145,6 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
         ).unwrap();
     }
 
-    // Strip BOM
-    let source = source.trim_left_matches('\u{feff}');
-
     let token_tree_stream = v2::parse(source, debug)?;
 
     let mut definitions = Vec::new();
@@ -169,14 +159,13 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
         while let Some(tt) = iter.next() {
             match *tt {
                 v2::TokenTree::Cmdlet { span, ident } => {
-                    let location = Line::from_span(span, source);
                     let name = ident.cut_from(source).to_owned();
 
                     if is_function_definition {
-                        definitions.push(Definition { location, item: Item::function(name) });
+                        definitions.push(Definition { span, item: Item::function(name) });
                     } else {
                         if !v2::ident_is_keyword(&name) && !name.ends_with(".exe") {
-                            usages.push(Usage { location, item: Item::function(name) });
+                            usages.push(Usage { span, item: Item::function(name) });
                         }
                     }
                 }
@@ -197,9 +186,8 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
             (&[v2::TokenTree::Field { span, ident }], Some(v2::Delimiter::Bracket)) => {
                 // This is just a heuristic – not every [<word in brackets>] is necessarily
                 // a class name. But every usage of a class name should be of such form
-                let location = Line::from_span(span, source);
                 let name = ident.cut_from(source).to_owned();
-                usages.push(Usage { location, item: Item::class(name) });
+                usages.push(Usage { span, item: Item::class(name) });
             }
             _ => {}
         }
@@ -207,9 +195,8 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
         for window in stream.windows(2) {
             match window {
                 &[v2::TokenTree::ClassKeyword { .. }, v2::TokenTree::Field { span, ident }] => {
-                    let location = Line::from_span(span, source);
                     let name = ident.cut_from(source).to_owned();
-                    definitions.push(Definition { location, item: Item::class(name) });
+                    definitions.push(Definition { span, item: Item::class(name) });
                 }
                 _ => {}
             }
@@ -218,31 +205,31 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
 
     for (line, line_no) in source.lines().zip(1..) {
 
-        let get_location = || Line { line: line.to_owned(), no: line_no };
+        let get_span = |fragment: &str| Span::from_fragment(line_no, fragment, source);
 
         if let Some(captures) = IMPORT.captures(line) {
-            let importee = &captures[1];
+            let importee_string = &captures[1];
 
-            let importee = if let Some(captures) = IMPORT_RELATIVE.captures(importee) {
+            let importee = if let Some(captures) = IMPORT_RELATIVE.captures(importee_string) {
                 let relative = &captures[1];
                 let relative = relative.replace(r"\", "/");
                 let relative = relative.trim_matches('/');
                 Importee::Relative(relative.into())
-            } else if IMPORT_HERESUT.is_match(importee) {
+            } else if IMPORT_HERESUT.is_match(importee_string) {
                 Importee::HereSut
             } else {
-                Importee::Unrecognized(importee.to_owned())
+                Importee::Unrecognized(importee_string.to_owned())
             };
 
             imports.push(Import {
-                location: get_location(),
+                span: get_span(importee_string),
                 importee,
             })
         }
 
         if let Some(captures) = TESTCASE.captures(line) {
             testcases.push(Testcase {
-                location: get_location(),
+                span: get_span(&captures[1]),
                 name: captures[1].to_owned(),
             });
         }

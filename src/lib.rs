@@ -130,19 +130,29 @@ pub struct Location {
 }
 
 impl Location {
-    fn whole_file(file: &Path) -> Location {
+    fn whole_file(file: &preprocess::Parsed) -> Location {
         Location {
-            line: None,
-            file: file.to_owned(),
+            span: None,
+            file: file.original_path.to_owned(),
+            source: Rc::clone(&file.source),
         }
     }
 }
 
-impl Line {
-    fn in_file(&self, file: &Path) -> Location {
+impl Span {
+    fn in_file(&self, file: &preprocess::Parsed) -> Location {
         Location {
-            line: Some(self.to_owned()),
-            file: file.to_owned(),
+            span: Some(*self),
+            ..Location::whole_file(file)
+        }
+    }
+
+    // TODO remove either of these impls
+    fn in_file_source(&self, file: impl Into<PathBuf>, source: Rc<str>) -> Location {
+        Location {
+            span: Some(*self),
+            file: file.into(),
+            source,
         }
     }
 }

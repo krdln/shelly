@@ -137,7 +137,7 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                     // Don't produce errors for unkown classes yet,
                     // because their usage us a big heuristic.
                     if usage.item.is_function() {
-                        usage.location.in_file(&parsed.original_path)
+                        usage.span.in_file(&parsed)
                             .lint(Lint::UnknownFunctions, format!("Not in scope: {}", usage.name()))
                             .what(usage.name())
                             .emit(emitter);
@@ -155,7 +155,7 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
 
                     used_dependencies.insert(imported_through);
 
-                    usage.location.in_file(&parsed.original_path)
+                    usage.span.in_file(&parsed)
                         .lint(Lint::IndirectImports, format!("Indirectly imported: {}", usage.name()))
                         .what(usage.name())
                         .note(format!(
@@ -174,7 +174,7 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                 used_dependencies.insert(defined.origin);
 
                 if usage.item != defined.definition.item {
-                    usage.location.in_file(&parsed.original_path)
+                    usage.span.in_file(&parsed)
                         .lint(Lint::InvalidLetterCasing, "Function name differs between usage and definition")
                         .note("Check whether the letter casing is the same")
                         .emit(emitter);
@@ -195,7 +195,7 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                     continue;
                 }
 
-                import.location.in_file(&parsed.original_path)
+                import.span.in_file(&parsed)
                     .lint(
                         Lint::UnusedImports,
                         format!("Unused import of {}", files[imported_file].original_path.display())

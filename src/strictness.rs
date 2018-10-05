@@ -22,7 +22,7 @@ pub fn preprocess(file: &mut Parsed) {
         if usage.item.as_ref() == Item::function("Set-StrictMode") {
             file.definitions.push(::syntax::Definition {
                 item: strict_mode_pseudoitem().into(),
-                location: usage.location.clone()
+                span: usage.span.clone()
             });
             break;
         }
@@ -48,7 +48,7 @@ pub fn analyze<'a>(
 
     for &file in &root_files {
         if scopes[file].search(&strict_mode_pseudoitem()).is_none() {
-            Location::whole_file(&files[file].original_path)
+            Location::whole_file(&files[file])
                 .lint(Lint::NoStrictMode, "Strict mode not enabled for this file")
                 .emit(emitter);
         }

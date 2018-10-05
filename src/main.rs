@@ -9,7 +9,7 @@ use yansi::{Color, Paint, Style};
 use std::path::{Path, PathBuf};
 use std::collections::BTreeMap as Map;
 
-use shelly::{Line, EmittedItem, RunOpt, lint::{Lint, self}};
+use shelly::{EmittedItem, RunOpt, lint::{Lint, self}};
 
 #[macro_use]
 extern crate structopt;
@@ -152,11 +152,11 @@ impl shelly::Emitter for CliEmitter {
     fn emit(&mut self, item: EmittedItem) {
         // Style of error message inspired by Rust
 
-        let line_no = item.location.line
+        let line_no = item.location.span
             .as_ref()
             .map_or_else(
                 || " ".to_string(),
-                |line| line.no.to_string()
+                |span| span.start.line.to_string()
             );
 
         let offset = || {
@@ -180,13 +180,16 @@ impl shelly::Emitter for CliEmitter {
             "{} {}{}",
             blue.paint("-->"),
             item.location.file.display(),
-            item.location.line.as_ref().map(|line| format!(":{}", line.no)).unwrap_or_default()
+            item.location.span.as_ref().map(
+                |span| format!(":{}:{}", span.start.line, span.start.col)
+            ).unwrap_or_default()
         );
 
-        if let Some(Line { line, .. }) = item.location.line {
+        if let Some(span) = item.location.span {
             offset();
             println!(" {}", pipe);
 
+            let line = span.start.find_line(&item.location.source);
             println!("{} {} {}", blue.paint(&line_no), pipe, line);
         }
 

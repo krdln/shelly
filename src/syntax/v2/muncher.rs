@@ -25,7 +25,7 @@ pub struct Location {
 }
 
 /// A span between two locations in a file
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Span {
     pub start: Location,
     pub end: Location,
@@ -41,18 +41,33 @@ impl Location {
     }
 
     pub fn find_line<'source>(&self, source: &'source str) -> &'source str {
-        let mut start = self.byte as usize;
-        loop {
-            if start == 0 {
-                break;
-            } if source.as_bytes().get(start) == Some(&b'\n') {
-                start += 1;
-                break;
-            }
-            start -= 1;
-        }
-        source[start..].lines().next().unwrap_or("")
+        find_line(self.byte as usize, source)
     }
+
+    pub fn to_span(self) -> Span {
+        Span {
+            start: self,
+            end: Location {
+                byte: self.byte + 1,
+                line: self.line,
+                col: self.col + 1,
+            }
+        }
+    }
+}
+
+fn find_line<'source>(byte_offset: usize, source: &'source str) -> &'source str {
+    let mut start = byte_offset as usize;
+    loop {
+        if start == 0 {
+            break;
+        } if source.as_bytes().get(start) == Some(&b'\n') {
+            start += 1;
+            break;
+        }
+        start -= 1;
+    }
+    source[start..].lines().next().unwrap_or("")
 }
 
 impl<'source> Muncher<'source> {
@@ -128,6 +143,38 @@ impl Span {
         Span {
             start: self.start,
             end:   right.end,
+        }
+    }
+
+    /// Creates a span of a fragment `&str` in a `whole`
+    ///
+    /// The fragment has to be a subslice of the whole.
+    ///
+    /// Line number is 1-indexed.
+    ///
+    /// This function exists temporarily to handle regex-found
+    /// syntax elements.
+    pub fn from_fragment(line_no: u32, frag: &str, whole: &str) -> Span {
+        let whole_start = whole.as_ptr() as usize;
+        let frag_start = frag.as_ptr() as usize;
+        assert!(frag_start >= whole_start);
+        let offset = frag_start - whole_start;
+        assert!(offset + frag.len() <= whole.len());
+
+        let line = find_line(offset, whole);
+        let col = (frag_start - line.as_ptr() as usize) + 1;
+
+        Span {
+            start: Location {
+                byte: offset as u32,
+                line: line_no,
+                col: col as u16,
+            },
+            end: Location {
+                byte: (offset + frag.len()) as u32,
+                line: line_no,
+                col: (col + frag.len()) as u16,
+            },
         }
     }
 }
