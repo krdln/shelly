@@ -67,7 +67,7 @@ fn it_can_be_used_as_a_binary() {
 
     assert!(output.status.success());
     let output_string = ::std::str::from_utf8(&output.stdout).unwrap();
-    assert!(output_string.contains("Not in scope"));
+    assert!(output_string.contains("not in scope"));
 }
 
 #[test]

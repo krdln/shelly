@@ -8,6 +8,7 @@ use failure;
 
 use EmittedItem;
 use Location;
+use Span;
 use MessageKind;
 use ConfigFile;
 
@@ -125,7 +126,7 @@ impl Lint {
     }
 }
 
-fn parse_allow_annotation(line: &str) -> Result<Option<(Lint, Option<&str>)>, UnknownLint> {
+fn parse_allow_annotation(line: &str) -> Result<Option<(Lint, Option<&str>)>, &str> {
     lazy_static!(
         static ref RE: Regex = Regex::new(
             r"(?ix) ^ [^\#]* \# \s* (?: shelly:|analyzer:)? \s*
@@ -138,8 +139,8 @@ fn parse_allow_annotation(line: &str) -> Result<Option<(Lint, Option<&str>)>, Un
         None => return Ok(None),
     };
 
-    let lint = captures.get(1).unwrap().as_str();
-    let lint = lint.parse()?;
+    let lint_name = captures.get(1).unwrap().as_str();
+    let lint = lint_name.parse().map_err(|_| lint_name)?;
     let what = captures.get(2).map(|match_| match_.as_str());
 
     Ok(Some((lint, what)))
@@ -153,7 +154,7 @@ fn test_parse_allow_annotation() {
     );
     assert_eq!(
         parse_allow_annotation("New-Foo # allow unicorns"),
-        Err(UnknownLint("unicorns".to_owned())),
+        Err("unicorns"),
     );
     assert_eq!(
         parse_allow_annotation("New-Foo # allow unknown-functions"),
@@ -298,11 +299,18 @@ impl<'e> Emitter<'e> {
         };
 
         if message.lint != Lint::UnknownLints {
-            if let Some(line) = &message.location.line {
-                match parse_allow_annotation(&line.line) {
+            if let Some(span) = &message.location.span {
+                let line = span.start.find_line(&message.location.source);
+
+                match parse_allow_annotation(line) {
                     Err(unknown_lint) => {
-                        message.location.clone()
-                            .lint(Lint::UnknownLints, format!("Unknown lint: {}", unknown_lint.0))
+                        Location {
+                            span: Some(
+                                Span::from_fragment(span.start.line, unknown_lint, &message.location.source)
+                            ),
+                            ..message.location.clone()
+                        }
+                            .lint(Lint::UnknownLints, "unknown lint")
                             .note("Use `shelly show-lints` to list available lints")
                             .emit(self);
                     }
@@ -319,7 +327,7 @@ impl<'e> Emitter<'e> {
         }
 
         if self.encountered_lints.insert(message.lint) == true
-        && message.location.line.is_some()
+        && message.location.span.is_some()
         && message.lint != Lint::UnknownLints {
             let elem_str = message.what.as_ref()
                 .map(|what| format!("({})", what))
@@ -405,7 +413,7 @@ impl MessageBuilder {
 
 #[test]
 fn test_ignoring_allowed_messages() {
-    let get_location = || Location { file: "foo".into(), line: None };
+    let get_location = || Location { file: "foo".into(), span: None, source: "".into() };
     let mut raw_emitter = ::VecEmitter::new();
 
     // Allowed in a config
@@ -413,7 +421,7 @@ fn test_ignoring_allowed_messages() {
         let mut emitter = Emitter::new(
             &mut raw_emitter,
             Config { cap: Level::Allow, ..Config::default() },
-            );
+        );
         get_location().lint(Lint::UnknownFunctions, "Boo").emit(&mut emitter);
     }
     assert!(raw_emitter.emitted_items.is_empty());

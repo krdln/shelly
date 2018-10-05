@@ -4,12 +4,12 @@ extern crate failure;
 use failure::Error;
 
 extern crate yansi;
-use yansi::{Color, Paint};
+use yansi::{Color, Paint, Style};
 
 use std::path::{Path, PathBuf};
 use std::collections::BTreeMap as Map;
 
-use shelly::{Line, EmittedItem, RunOpt, lint::{Lint, self}};
+use shelly::{EmittedItem, RunOpt, lint::{Lint, self}};
 
 #[macro_use]
 extern crate structopt;
@@ -152,11 +152,11 @@ impl shelly::Emitter for CliEmitter {
     fn emit(&mut self, item: EmittedItem) {
         // Style of error message inspired by Rust
 
-        let line_no = item.location.line
+        let line_no = item.location.span
             .as_ref()
             .map_or_else(
                 || " ".to_string(),
-                |line| line.no.to_string()
+                |span| span.start.line.to_string()
             );
 
         let offset = || {
@@ -168,31 +168,58 @@ impl shelly::Emitter for CliEmitter {
         let blue = Color::Blue.style().bold();
         let pipe = blue.paint("|");
 
-        match item.kind {
-            shelly::MessageKind::Error => {
-                println!("{}: {}", Color::Red.style().bold().paint("error"), item.message)
-            }
-            shelly::MessageKind::Warning => println!(
-                "{}: {}",
-                Color::Yellow.style().bold().paint("warning"),
-                item.message
-            ),
-        }
+        let (accent_style, message_kind) = match item.kind {
+            shelly::MessageKind::Error   => (Color::Red.style().bold(), "error"),
+            shelly::MessageKind::Warning => (Color::Yellow.style().bold(), "warning"),
+        };
+
+        println!(
+            "{}: {}",
+            accent_style.paint(message_kind),
+            Style::new().bold().paint(item.message)
+        );
 
         offset();
-        println!("{} {}", blue.paint("-->"), item.location.file.display());
+        println!(
+            "{} {}{}",
+            blue.paint("-->"),
+            item.location.file.display(),
+            item.location.span.as_ref().map(
+                |span| format!(":{}:{}", span.start.line, span.start.col)
+            ).unwrap_or_default()
+        );
 
-        if let Some(Line { line, .. }) = item.location.line {
+        if let Some(span) = item.location.span {
             offset();
             println!(" {}", pipe);
 
+            let line = span.start.find_line(&item.location.source);
             println!("{} {} {}", blue.paint(&line_no), pipe, line);
+
+            // Now, let's print squiggles
+
+            offset();
+            print!(" {} ", pipe);
+
+            let underlinee = &item.location.source[span.start.byte as usize .. span.end.byte as usize];
+            // Trim the span to current line
+            let underlinee = underlinee.split(&['\r', '\n'] as &[char]).next().unwrap();
+            let width = ::std::cmp::max(1, underlinee.chars().count());
+
+            // Print space before squiggles.
+            // We're printing it char-by-char to handle tabs the same way as original line.
+            for c in line.chars().take(span.start.col as usize - 1) {
+                if c.is_whitespace() {
+                    print!("{}", c);
+                } else {
+                    print!(" ");
+                }
+            }
+
+            println!("{}", accent_style.paint("^".repeat(width)));
         }
 
         if let Some(notes) = item.notes {
-            offset();
-            println!(" {}", pipe);
-
             for line in notes.lines() {
                 offset();
                 println!(" {} {}", blue.paint("="), line);

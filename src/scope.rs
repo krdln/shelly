@@ -137,8 +137,8 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                     // Don't produce errors for unkown classes yet,
                     // because their usage us a big heuristic.
                     if usage.item.is_function() {
-                        usage.location.in_file(&parsed.original_path)
-                            .lint(Lint::UnknownFunctions, format!("Not in scope: {}", usage.name()))
+                        usage.span.in_file(&parsed)
+                            .lint(Lint::UnknownFunctions, "function not in scope")
                             .what(usage.name())
                             .emit(emitter);
                     }
@@ -155,8 +155,8 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
 
                     used_dependencies.insert(imported_through);
 
-                    usage.location.in_file(&parsed.original_path)
-                        .lint(Lint::IndirectImports, format!("Indirectly imported: {}", usage.name()))
+                    usage.span.in_file(&parsed)
+                        .lint(Lint::IndirectImports, "indirectly imported")
                         .what(usage.name())
                         .note(format!(
                             "Indirectly imported through {}",
@@ -174,8 +174,8 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                 used_dependencies.insert(defined.origin);
 
                 if usage.item != defined.definition.item {
-                    usage.location.in_file(&parsed.original_path)
-                        .lint(Lint::InvalidLetterCasing, "Function name differs between usage and definition")
+                    usage.span.in_file(&parsed)
+                        .lint(Lint::InvalidLetterCasing, "function name differs between usage and definition")
                         .note("Check whether the letter casing is the same")
                         .emit(emitter);
                 }
@@ -195,11 +195,8 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                     continue;
                 }
 
-                import.location.in_file(&parsed.original_path)
-                    .lint(
-                        Lint::UnusedImports,
-                        format!("Unused import of {}", files[imported_file].original_path.display())
-                    )
+                import.span.in_file(&parsed)
+                    .lint(Lint::UnusedImports, "unused import")
                     .emit(emitter);
             }
         }
@@ -279,7 +276,7 @@ fn get_scope<'a>(
 
 #[cfg(test)]
 mod test {
-    use syntax::{Line, Definition, Usage, Import, Importee};
+    use syntax::{Span, Definition, Usage, Import, Importee};
     use VecEmitter;
     use MessageKind;
     use lint;
@@ -294,28 +291,28 @@ mod test {
 
     fn usage(fun: &str) -> Usage {
         Usage {
-            location: Line { line: fun.to_owned(), no: 1 },
+            span: Span::dummy(),
             item: Item::function(fun.to_owned()),
         }
     }
 
     fn class_usage(class: &str) -> Usage {
         Usage {
-            location: Line { line: class.to_owned(), no: 1 },
+            span: Span::dummy(),
             item: Item::class(class.to_owned()),
         }
     }
 
     fn definition(fun: &str) -> Definition {
         Definition {
-            location: Line { line: fun.to_owned(), no: 1 },
+            span: Span::dummy(),
             item: Item::function(fun.to_owned()),
         }
     }
 
     fn class_definition(class: &str) -> Definition {
         Definition {
-            location: Line { line: class.to_owned(), no: 1 },
+            span: Span::dummy(),
             item: Item::class(class.to_owned()),
         }
     }
@@ -324,7 +321,7 @@ mod test {
         (
             PathBuf::from(relpath),
             Import {
-                location: Line { line: format!(". $PSScriptRoot/{}", relpath), no: 1 },
+                span: Span::dummy(),
                 importee: Importee::Relative(relpath.into()),
             }
         )

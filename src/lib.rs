@@ -24,6 +24,7 @@ use failure::Error;
 use failure::ResultExt;
 
 use std::collections::BTreeMap as Map;
+use std::rc::Rc;
 use std::path::{Path, PathBuf};
 use std::fs;
 
@@ -118,29 +119,40 @@ impl Default for MessageKind {
     fn default() -> MessageKind { MessageKind::Error }
 }
 
-pub use syntax::Line;
+pub use syntax::Span;
 
 /// Location of a message
 #[derive(Debug, Clone)]
 pub struct Location {
     pub file: PathBuf,
-    pub line: Option<Line>,
+    pub source: Rc<str>,
+    pub span: Option<Span>,
 }
 
 impl Location {
-    fn whole_file(file: &Path) -> Location {
+    fn whole_file(file: &preprocess::Parsed) -> Location {
         Location {
-            line: None,
-            file: file.to_owned(),
+            span: None,
+            file: file.original_path.to_owned(),
+            source: Rc::clone(&file.source),
         }
     }
 }
 
-impl Line {
-    fn in_file(&self, file: &Path) -> Location {
+impl Span {
+    fn in_file(&self, file: &preprocess::Parsed) -> Location {
         Location {
-            line: Some(self.to_owned()),
-            file: file.to_owned(),
+            span: Some(*self),
+            ..Location::whole_file(file)
+        }
+    }
+
+    // TODO remove either of these impls
+    fn in_file_source(&self, file: impl Into<PathBuf>, source: Rc<str>) -> Location {
+        Location {
+            span: Some(*self),
+            file: file.into(),
+            source,
         }
     }
 }
