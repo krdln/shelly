@@ -65,7 +65,6 @@ pub fn parse_and_preprocess(path: &Path, run_opt: &RunOpt, emitter: &mut Emitter
             e.where_.to_span()
                 .in_file_source(path, Rc::from(source))
                 .lint(Lint::SyntaxErrors, format!("syntax error: {}", e.what))
-                .note(format!("Column {}", e.where_.col))
                 .note("If this is valid PowerShell syntax, please file an issue")
                 .emit(emitter);
             return Ok(PreprocessOutput::SyntaxErrors);

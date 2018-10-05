@@ -45,14 +45,7 @@ impl Location {
     }
 
     pub fn to_span(self) -> Span {
-        Span {
-            start: self,
-            end: Location {
-                byte: self.byte + 1,
-                line: self.line,
-                col: self.col + 1,
-            }
-        }
+        Span { start: self, end: self }
     }
 }
 

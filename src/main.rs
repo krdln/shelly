@@ -201,14 +201,14 @@ impl shelly::Emitter for CliEmitter {
             offset();
             print!(" {} ", pipe);
 
-            let offset = span.start.col as usize - 1;
-            let len = (span.end.byte - span.start.byte) as usize;
-            let len = if offset + len <= line.len() { len } else { line.len() - offset };
-            let width = line[offset..][..len].chars().count();
+            let underlinee = &item.location.source[span.start.byte as usize .. span.end.byte as usize];
+            // Trim the span to current line
+            let underlinee = underlinee.split(&['\r', '\n'] as &[char]).next().unwrap();
+            let width = ::std::cmp::max(1, underlinee.chars().count());
 
             // Print space before squiggles.
             // We're printing it char-by-char to handle tabs the same way as original line.
-            for c in line[..offset].chars() {
+            for c in line.chars().take(span.start.col as usize - 1) {
                 if c.is_whitespace() {
                     print!("{}", c);
                 } else {
