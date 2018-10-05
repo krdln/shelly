@@ -176,7 +176,12 @@ impl shelly::Emitter for CliEmitter {
         println!("{}: {}", message_kind, Style::new().bold().paint(item.message));
 
         offset();
-        println!("{} {}", blue.paint("-->"), item.location.file.display());
+        println!(
+            "{} {}{}",
+            blue.paint("-->"),
+            item.location.file.display(),
+            item.location.line.as_ref().map(|line| format!(":{}", line.no)).unwrap_or_default()
+        );
 
         if let Some(Line { line, .. }) = item.location.line {
             offset();
