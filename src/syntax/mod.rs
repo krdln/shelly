@@ -99,6 +99,7 @@ impl<S: AsRef<str>> Item<S> {
     }
 
     pub fn is_function(&self) -> bool { self.kind == ItemKind::Function }
+    pub fn is_class(&self) -> bool { self.kind == ItemKind::Class }
 
 }
 

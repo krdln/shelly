@@ -120,10 +120,10 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
 }
 
 impl Parsed {
-    pub fn functions(&self) -> impl Iterator<Item=&syntax::Definition> {
+    pub fn functions_and_classes(&self) -> impl Iterator<Item=&syntax::Definition> {
         self.definitions
             .iter()
-            .filter(|def| def.item.is_function())
+            .filter(|def| def.item.is_function() || def.item.is_class())
     }
 }
 
