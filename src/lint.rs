@@ -154,7 +154,7 @@ fn test_parse_allow_annotation() {
     );
     assert_eq!(
         parse_allow_annotation("New-Foo # allow unicorns"),
-        Err(UnknownLint("unicorns".to_owned())),
+        Err("unicorns"),
     );
     assert_eq!(
         parse_allow_annotation("New-Foo # allow unknown-functions"),
@@ -413,7 +413,7 @@ impl MessageBuilder {
 
 #[test]
 fn test_ignoring_allowed_messages() {
-    let get_location = || Location { file: "foo".into(), line: None };
+    let get_location = || Location { file: "foo".into(), span: None, source: "".into() };
     let mut raw_emitter = ::VecEmitter::new();
 
     // Allowed in a config
@@ -421,7 +421,7 @@ fn test_ignoring_allowed_messages() {
         let mut emitter = Emitter::new(
             &mut raw_emitter,
             Config { cap: Level::Allow, ..Config::default() },
-            );
+        );
         get_location().lint(Lint::UnknownFunctions, "Boo").emit(&mut emitter);
     }
     assert!(raw_emitter.emitted_items.is_empty());

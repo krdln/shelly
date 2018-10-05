@@ -132,6 +132,10 @@ impl<'source> Muncher<'source> {
 }
 
 impl Span {
+    pub fn dummy() -> Span {
+        Location::start().to_span()
+    }
+
     pub fn to(self, right: Span) -> Span {
         Span {
             start: self.start,

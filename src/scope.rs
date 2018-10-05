@@ -276,7 +276,7 @@ fn get_scope<'a>(
 
 #[cfg(test)]
 mod test {
-    use syntax::{Line, Definition, Usage, Import, Importee};
+    use syntax::{Span, Definition, Usage, Import, Importee};
     use VecEmitter;
     use MessageKind;
     use lint;
@@ -291,28 +291,28 @@ mod test {
 
     fn usage(fun: &str) -> Usage {
         Usage {
-            location: Line { line: fun.to_owned(), no: 1 },
+            span: Span::dummy(),
             item: Item::function(fun.to_owned()),
         }
     }
 
     fn class_usage(class: &str) -> Usage {
         Usage {
-            location: Line { line: class.to_owned(), no: 1 },
+            span: Span::dummy(),
             item: Item::class(class.to_owned()),
         }
     }
 
     fn definition(fun: &str) -> Definition {
         Definition {
-            location: Line { line: fun.to_owned(), no: 1 },
+            span: Span::dummy(),
             item: Item::function(fun.to_owned()),
         }
     }
 
     fn class_definition(class: &str) -> Definition {
         Definition {
-            location: Line { line: class.to_owned(), no: 1 },
+            span: Span::dummy(),
             item: Item::class(class.to_owned()),
         }
     }
@@ -321,7 +321,7 @@ mod test {
         (
             PathBuf::from(relpath),
             Import {
-                location: Line { line: format!(". $PSScriptRoot/{}", relpath), no: 1 },
+                span: Span::dummy(),
                 importee: Importee::Relative(relpath.into()),
             }
         )
