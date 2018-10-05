@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use regex::Regex;
-use unicase::UniCase;
+use unicase::{self, UniCase};
 
 mod v2;
 pub use self::v2::{Span, FileStr};
