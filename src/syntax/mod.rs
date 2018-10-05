@@ -1,8 +1,10 @@
 use std::path::PathBuf;
 
 use regex::Regex;
+use unicase::UniCase;
 
 mod v2;
+use self::v2::Span;
 pub use self::v2::Error;
 pub use self::v2::Result;
 
@@ -20,6 +22,15 @@ pub struct File {
 pub struct Line {
     pub line: String,
     pub no: u32,
+}
+
+impl Line {
+    fn from_span(span: Span, source: &str) -> Line {
+        Line {
+            line: span.start.find_line(source).to_owned(),
+            no:   span.start.line,
+        }
+    }
 }
 
 /// A `.` import
@@ -41,18 +52,82 @@ pub enum Importee {
     Unrecognized(String),
 }
 
-/// Function / commandlet definition
+/// An item – function, class, etc.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Item<S: AsRef<str>> {
+    pub name: S,
+    kind: ItemKind,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum ItemKind {
+    Function,
+    Class,
+
+    /// Pseudoitems are items that are propaged similarly to normal
+    /// definitions, but they're created by some part of analysis.
+    /// Eg. we have "uses strict mode" pseudoitem, that gets injected
+    /// on "Set-StrictMode" and propagates to downstream files.
+    Pseudoitem,
+}
+
+impl<S: AsRef<str>> Item<S> {
+    pub fn as_case_insensitive(&self) -> Item<UniCase<&str>> {
+        Item {
+            name: UniCase::new(self.name.as_ref()),
+            kind: self.kind,
+        }
+    }
+
+    pub fn as_ref(&self) -> Item<&str> {
+        Item {
+            name: self.name.as_ref(),
+            kind: self.kind,
+        }
+    }
+
+    pub fn function(name: S) -> Self {
+        Item { name, kind: ItemKind::Function, }
+    }
+
+    pub fn class(name: S) -> Self {
+        Item { name, kind: ItemKind::Class, }
+    }
+
+    pub fn pseudo(name: S) -> Self {
+        Item { name, kind: ItemKind::Pseudoitem, }
+    }
+
+    pub fn is_function(&self) -> bool { self.kind == ItemKind::Function }
+    pub fn is_class(&self) -> bool { self.kind == ItemKind::Class }
+
+}
+
+impl<'a> From<Item<&'a str>> for Item<String> {
+    fn from(item: Item<&'a str>) -> Self {
+        Item {
+            name: item.name.into(),
+            kind: item.kind,
+        }
+    }
+}
+
+/// Definition of an item
 #[derive(Debug)]
 pub struct Definition {
     pub location: Line,
-    pub name: String,
+    pub item: Item<String>,
 }
 
-/// Function / commandlet call
+/// Function/commandlet call / usage of a class
 #[derive(Debug)]
 pub struct Usage {
     pub location: Line,
-    pub name: String,
+    pub item: Item<String>,
+}
+
+impl Usage {
+    pub fn name(&self) -> &str { &self.item.name }
 }
 
 /// `It` testcase
@@ -94,23 +169,21 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
     let mut imports = Vec::new();
     let mut testcases = Vec::new();
 
-    v2::traverse_streams(&token_tree_stream, |stream| {
+    // Gather function definitions and usages
+    v2::traverse_streams(&token_tree_stream, |stream, _| {
         let mut is_function_definition = false;
         let mut iter = stream.iter();
         while let Some(tt) = iter.next() {
             match *tt {
                 v2::TokenTree::Cmdlet { span, ident } => {
-                    let location = Line {
-                        line: span.start.find_line(source).to_owned(),
-                        no:   span.start.line,
-                    };
+                    let location = Line::from_span(span, source);
                     let name = ident.cut_from(source).to_owned();
 
                     if is_function_definition {
-                        definitions.push(Definition { location, name });
+                        definitions.push(Definition { location, item: Item::function(name) });
                     } else {
                         if !v2::ident_is_keyword(&name) && !name.ends_with(".exe") {
-                            usages.push(Usage { location, name });
+                            usages.push(Usage { location, item: Item::function(name) });
                         }
                     }
                 }
@@ -121,6 +194,32 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
                 v2::TokenTree::FunctionKeyword { .. } => true,
                 _                                     => false,
             };
+        }
+    });
+
+    // Gather class definitions and usages
+    v2::traverse_streams(&token_tree_stream, |stream, delim| {
+        match (stream, delim) {
+            // TODO: stop representing class names as "fields".
+            (&[v2::TokenTree::Field { span, ident }], Some(v2::Delimiter::Bracket)) => {
+                // This is just a heuristic – not every [<word in brackets>] is necessarily
+                // a class name. But every usage of a class name should be of such form
+                let location = Line::from_span(span, source);
+                let name = ident.cut_from(source).to_owned();
+                usages.push(Usage { location, item: Item::class(name) });
+            }
+            _ => {}
+        }
+
+        for window in stream.windows(2) {
+            match window {
+                &[v2::TokenTree::ClassKeyword { .. }, v2::TokenTree::Field { span, ident }] => {
+                    let location = Line::from_span(span, source);
+                    let name = ident.cut_from(source).to_owned();
+                    definitions.push(Definition { location, item: Item::class(name) });
+                }
+                _ => {}
+            }
         }
     });
 
@@ -185,6 +284,9 @@ fn test_basics() {
         Describe "something" {
             It "works" {}
         }
+
+        class Car {}
+        [Boat] $Foo = 5
     "#;
 
     let parsed = parse(source, false).unwrap();
@@ -195,12 +297,16 @@ fn test_basics() {
     assert_eq!(parsed.imports[3].importee, Importee::Relative("foo/quux".into()));
     assert_eq!(parsed.imports[4].importee, Importee::Unrecognized("blablabla".into()));
 
-    assert_eq!(parsed.definitions[0].name, "Foo");
-    assert_eq!(parsed.definitions[1].name, "Bar");
+    assert_eq!(parsed.definitions[0].item.name, "Foo");
+    assert_eq!(parsed.definitions[1].item.name, "Bar");
+    assert_eq!(parsed.definitions[2].item.as_ref(), Item::class("Car"));
 
-    assert_eq!(parsed.usages[0].name, "Fooize-Bar");
-    assert_eq!(parsed.usages[1].name, "Write-Host");
-    assert_eq!(parsed.usages[2].name, "Write-Log");
+    assert_eq!(parsed.usages[0].item.name, "Fooize-Bar");
+    assert_eq!(parsed.usages[1].item.name, "Write-Host");
+    assert_eq!(parsed.usages[2].item.name, "Write-Log");
+    assert_eq!(parsed.usages[3].item.as_ref(), Item::function("Describe"));
+    assert_eq!(parsed.usages[4].item.as_ref(), Item::function("It"));
+    assert_eq!(parsed.usages[5].item.as_ref(), Item::class("Boat"));
 
     assert_eq!(parsed.testcases[0].name, "works");
 }
@@ -220,7 +326,7 @@ fn test_nested() {
 
     let mut funs: Vec<_> = parsed.definitions
         .iter()
-        .map(|def| &def.name)
+        .map(|def| &def.item.name)
         .collect();
 
     funs.sort();

@@ -120,16 +120,10 @@ fn resolve_imports(source_path: &Path, imports: Vec<syntax::Import>, emitter: &m
 }
 
 impl Parsed {
-    pub fn functions(&self) -> impl Iterator<Item=&syntax::Definition> {
-        // Currently all definitions are functions, except the
-        // pseudoitems, whose names begin with `!`.
-        // Pseudoitems are items that are propaged similarly to normal
-        // definitions, but they're created by some part of analysis.
-        // Eg. we have "uses strict mode" pseudoitem, that gets injected
-        // on "Set-StrictMode" and propagates to downstream files.
+    pub fn functions_and_classes(&self) -> impl Iterator<Item=&syntax::Definition> {
         self.definitions
             .iter()
-            .filter(|def| !def.name.starts_with("!"))
+            .filter(|def| def.item.is_function() || def.item.is_class())
     }
 }
 

@@ -418,16 +418,20 @@ fn parse_variable_name(mut dollar_span: Option<Span>, stream: &mut Stream<TT1>, 
     }
 }
 
-pub fn traverse_streams(stream: &[TT], mut fun: impl FnMut(&[TT])) {
-    traverse_streams_(stream, &mut fun);
+pub fn traverse_streams(stream: &[TT], mut fun: impl FnMut(&[TT], Option<Delimiter>)) {
+    traverse_streams_(stream, None, &mut fun);
 }
 
-fn traverse_streams_(stream: &[TT], fun: &mut impl FnMut(&[TT])) {
-    fun(stream);
+fn traverse_streams_(
+    stream: &[TT],
+    delimiter: Option<Delimiter>,
+    fun: &mut impl FnMut(&[TT], Option<Delimiter>)
+) {
+    fun(stream, delimiter);
     for tt in stream.iter() {
         match tt {
-            TT::Group { interior, .. }            |
-            TT::String { subtrees: interior, .. } => traverse_streams_(interior, fun),
+            TT::Group { interior, delimiter, .. } => traverse_streams_(interior, Some(*delimiter), fun),
+            TT::String { subtrees, .. }           => traverse_streams_(subtrees, None, fun),
             _                                     => ()
         }
     }
