@@ -24,6 +24,7 @@ use failure::Error;
 use failure::ResultExt;
 
 use std::collections::BTreeMap as Map;
+use std::rc::Rc;
 use std::path::{Path, PathBuf};
 use std::fs;
 
@@ -118,13 +119,14 @@ impl Default for MessageKind {
     fn default() -> MessageKind { MessageKind::Error }
 }
 
-pub use syntax::Line;
+pub use syntax::Span;
 
 /// Location of a message
 #[derive(Debug, Clone)]
 pub struct Location {
     pub file: PathBuf,
-    pub line: Option<Line>,
+    pub source: Rc<str>,
+    pub span: Option<Span>,
 }
 
 impl Location {

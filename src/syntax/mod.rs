@@ -4,7 +4,7 @@ use regex::Regex;
 use unicase::UniCase;
 
 mod v2;
-use self::v2::Span;
+pub use self::v2::Span;
 pub use self::v2::Error;
 pub use self::v2::Result;
 
@@ -15,13 +15,6 @@ pub struct File {
     pub definitions: Vec<Definition>,
     pub usages: Vec<Usage>,
     pub testcases: Vec<Testcase>,
-}
-
-/// A source file's line with its location
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Line {
-    pub line: String,
-    pub no: u32,
 }
 
 impl Line {
