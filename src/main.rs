@@ -4,7 +4,7 @@ extern crate failure;
 use failure::Error;
 
 extern crate yansi;
-use yansi::{Color, Paint};
+use yansi::{Color, Paint, Style};
 
 use std::path::{Path, PathBuf};
 use std::collections::BTreeMap as Map;
@@ -168,16 +168,12 @@ impl shelly::Emitter for CliEmitter {
         let blue = Color::Blue.style().bold();
         let pipe = blue.paint("|");
 
-        match item.kind {
-            shelly::MessageKind::Error => {
-                println!("{}: {}", Color::Red.style().bold().paint("error"), item.message)
-            }
-            shelly::MessageKind::Warning => println!(
-                "{}: {}",
-                Color::Yellow.style().bold().paint("warning"),
-                item.message
-            ),
-        }
+        let message_kind = match item.kind {
+            shelly::MessageKind::Error   => Color::Red.style().bold().paint("error"),
+            shelly::MessageKind::Warning => Color::Yellow.style().bold().paint("warning"),
+        };
+
+        println!("{}: {}", message_kind, Style::new().bold().paint(item.message));
 
         offset();
         println!("{} {}", blue.paint("-->"), item.location.file.display());
