@@ -144,30 +144,39 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                     }
                 }
                 Some((Found::Indirect, item)) => {
-                    let imported_through = parsed.imports
+                    let imported_through: Vec<_> = parsed.imports
                         .keys()
-                        .find(|imported_file| {
+                        .filter(|imported_file| {
                             get_cached_scope(imported_file, &scopes)
                                 .search(&usage.item.as_ref())
                                 .is_some()
                         })
-                        .unwrap_or_else(|| unreachable!());
+                        .collect();
 
-                    used_dependencies.insert(imported_through);
+                    let through_import_bags: Vec<_> =
+                        imported_through
+                            .iter()
+                            .cloned()
+                            .filter(|through| files[*through].is_import_bag())
+                            .collect();
 
-                    if !files[imported_through].is_import_bag() {
+                    if through_import_bags.is_empty() {
+                        used_dependencies.insert(imported_through[0]);
+
                         usage.span.in_file(&parsed)
                             .lint(Lint::IndirectImports, "indirectly imported")
                             .what(usage.name())
                             .note(format!(
                                 "Indirectly imported through {}",
-                                files[imported_through].original_path.display()
+                                files[imported_through[0]].original_path.display()
                             ))
                             .note(format!(
                                 "Consider directly importing {}",
                                 files[item.origin].original_path.display()
                             ))
                             .emit(emitter);
+                    } else {
+                        used_dependencies.insert(through_import_bags[0]);
                     }
 
                 }
