@@ -500,6 +500,8 @@ mod test {
             file_D: uses foo() ---/  /
                                     /
             file_E: uses nothing --/
+                    (except of builtin functions.
+                     TODO: Dont' detect never-imported files as import-bags and revert the test)
 
             We expect that:
             * file_B complains about unused import file_C and
@@ -526,6 +528,7 @@ mod test {
                 }),
             ( "file_E".into(), Parsed {
                     imports: collect![import("file_B")],
+                    usages: vec![usage("New-Item")],
                     ..Parsed::default()
                 }),
         ].into_iter().collect();
@@ -624,6 +627,7 @@ mod test {
                 "file_B".into(),
                 Parsed {
                     imports: collect![import("file_A")],
+                    usages: collect![usage("New-Item")],
                     ..Parsed::default()
                 }
             ),
