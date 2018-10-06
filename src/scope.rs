@@ -144,29 +144,41 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
                     }
                 }
                 Some((Found::Indirect, item)) => {
-                    let imported_through = parsed.imports
+                    let imported_through: Vec<_> = parsed.imports
                         .keys()
-                        .find(|imported_file| {
+                        .filter(|imported_file| {
                             get_cached_scope(imported_file, &scopes)
                                 .search(&usage.item.as_ref())
                                 .is_some()
                         })
-                        .unwrap_or_else(|| unreachable!());
+                        .collect();
 
-                    used_dependencies.insert(imported_through);
+                    let through_import_bags: Vec<_> =
+                        imported_through
+                            .iter()
+                            .cloned()
+                            .filter(|through| files[*through].is_import_bag())
+                            .collect();
 
-                    usage.span.in_file(&parsed)
-                        .lint(Lint::IndirectImports, "indirectly imported")
-                        .what(usage.name())
-                        .note(format!(
-                            "Indirectly imported through {}",
-                            files[imported_through].original_path.display()
-                        ))
-                        .note(format!(
-                            "Consider directly importing {}",
-                            files[item.origin].original_path.display()
-                        ))
-                        .emit(emitter);
+                    if through_import_bags.is_empty() {
+                        used_dependencies.insert(imported_through[0]);
+
+                        usage.span.in_file(&parsed)
+                            .lint(Lint::IndirectImports, "indirectly imported")
+                            .what(usage.name())
+                            .note(format!(
+                                "Indirectly imported through {}",
+                                files[imported_through[0]].original_path.display()
+                            ))
+                            .note(format!(
+                                "Consider directly importing {}",
+                                files[item.origin].original_path.display()
+                            ))
+                            .emit(emitter);
+                    } else {
+                        used_dependencies.insert(through_import_bags[0]);
+                    }
+
                 }
                 _ => ()
             }
@@ -185,19 +197,21 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
         // TODO perhaps we can move this check out of scope
         // analysis to its own module? That would require
         // scope analysis to save some info.
-        for (imported_file, import) in &parsed.imports {
-            if !used_dependencies.contains(&**imported_file) {
-                if files[imported_file].functions_and_classes().next().is_none() {
-                    // Temporarily silence unused-imports for weird "empty" files
-                    // with no functions and no class definitions to avoid false positives.
-                    // TODO Make the parser understand the world beyond functions
-                    // and reenable the lint.
-                    continue;
-                }
+        if !parsed.is_import_bag() {
+            for (imported_file, import) in &parsed.imports {
+                if !used_dependencies.contains(&**imported_file) {
+                    if files[imported_file].functions_and_classes().next().is_none() {
+                        // Temporarily silence unused-imports for weird "empty" files
+                        // with no functions and no class definitions to avoid false positives.
+                        // TODO Make the parser understand the world beyond functions
+                        // and reenable the lint.
+                        continue;
+                    }
 
-                import.span.in_file(&parsed)
-                    .lint(Lint::UnusedImports, "unused import")
-                    .emit(emitter);
+                    import.span.in_file(&parsed)
+                        .lint(Lint::UnusedImports, "unused import")
+                        .emit(emitter);
+                }
             }
         }
     }
@@ -486,6 +500,8 @@ mod test {
             file_D: uses foo() ---/  /
                                     /
             file_E: uses nothing --/
+                    (except of builtin functions.
+                     TODO: Dont' detect never-imported files as import-bags and revert the test)
 
             We expect that:
             * file_B complains about unused import file_C and
@@ -512,6 +528,7 @@ mod test {
                 }),
             ( "file_E".into(), Parsed {
                     imports: collect![import("file_B")],
+                    usages: vec![usage("New-Item")],
                     ..Parsed::default()
                 }),
         ].into_iter().collect();
@@ -610,6 +627,7 @@ mod test {
                 "file_B".into(),
                 Parsed {
                     imports: collect![import("file_A")],
+                    usages: collect![usage("New-Item")],
                     ..Parsed::default()
                 }
             ),
