@@ -155,18 +155,21 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
 
                     used_dependencies.insert(imported_through);
 
-                    usage.span.in_file(&parsed)
-                        .lint(Lint::IndirectImports, "indirectly imported")
-                        .what(usage.name())
-                        .note(format!(
-                            "Indirectly imported through {}",
-                            files[imported_through].original_path.display()
-                        ))
-                        .note(format!(
-                            "Consider directly importing {}",
-                            files[item.origin].original_path.display()
-                        ))
-                        .emit(emitter);
+                    if !files[imported_through].is_import_bag() {
+                        usage.span.in_file(&parsed)
+                            .lint(Lint::IndirectImports, "indirectly imported")
+                            .what(usage.name())
+                            .note(format!(
+                                "Indirectly imported through {}",
+                                files[imported_through].original_path.display()
+                            ))
+                            .note(format!(
+                                "Consider directly importing {}",
+                                files[item.origin].original_path.display()
+                            ))
+                            .emit(emitter);
+                    }
+
                 }
                 _ => ()
             }
@@ -185,19 +188,21 @@ pub fn analyze<'a>(files: &'a Map<PathBuf, Parsed>, config: &ConfigFile, emitter
         // TODO perhaps we can move this check out of scope
         // analysis to its own module? That would require
         // scope analysis to save some info.
-        for (imported_file, import) in &parsed.imports {
-            if !used_dependencies.contains(&**imported_file) {
-                if files[imported_file].functions_and_classes().next().is_none() {
-                    // Temporarily silence unused-imports for weird "empty" files
-                    // with no functions and no class definitions to avoid false positives.
-                    // TODO Make the parser understand the world beyond functions
-                    // and reenable the lint.
-                    continue;
-                }
+        if !parsed.is_import_bag() {
+            for (imported_file, import) in &parsed.imports {
+                if !used_dependencies.contains(&**imported_file) {
+                    if files[imported_file].functions_and_classes().next().is_none() {
+                        // Temporarily silence unused-imports for weird "empty" files
+                        // with no functions and no class definitions to avoid false positives.
+                        // TODO Make the parser understand the world beyond functions
+                        // and reenable the lint.
+                        continue;
+                    }
 
-                import.span.in_file(&parsed)
-                    .lint(Lint::UnusedImports, "unused import")
-                    .emit(emitter);
+                    import.span.in_file(&parsed)
+                        .lint(Lint::UnusedImports, "unused import")
+                        .emit(emitter);
+                }
             }
         }
     }

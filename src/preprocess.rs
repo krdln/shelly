@@ -149,5 +149,10 @@ impl Parsed {
             .iter()
             .filter(|def| def.item.is_function() || def.item.is_class())
     }
+
+    /// Whether this file contains only imports (no definitions nor usages)
+    pub fn is_import_bag(&self) -> bool {
+        self.functions_and_classes().next().is_none() && self.usages.is_empty()
+    }
 }
 
