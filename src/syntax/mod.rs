@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
 use regex::Regex;
-use unicase::UniCase;
+use unicase::{self, UniCase};
 
 mod v2;
-pub use self::v2::Span;
+pub use self::v2::{Span, FileStr};
 pub use self::v2::Error;
 pub use self::v2::Result;
+use self::v2::TokenTree as TT;
 
 /// Parsed source file
 #[derive(Debug)]
@@ -138,11 +139,6 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
         static ref IMPORT_HERESUT: Regex = Regex::new(
             r#"(?ix) ^ ["]? \$ here [/\\] \$ sut ["]? $"#
         ).unwrap();
-
-        // TODO rewrite testcase parsing to token streams
-        static ref TESTCASE: Regex = Regex::new(
-            r#"(?ix) ^ \s* It \s+ " ([^"]*) " "#
-        ).unwrap();
     }
 
     let token_tree_stream = v2::parse(source, debug)?;
@@ -158,7 +154,7 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
         let mut iter = stream.iter();
         while let Some(tt) = iter.next() {
             match *tt {
-                v2::TokenTree::Cmdlet { span, ident } => {
+                TT::Cmdlet { span, ident } => {
                     let name = ident.cut_from(source).to_owned();
 
                     if is_function_definition {
@@ -173,17 +169,17 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
             }
 
             is_function_definition = match *tt {
-                v2::TokenTree::FunctionKeyword { .. } => true,
+                TT::FunctionKeyword { .. } => true,
                 _                                     => false,
             };
         }
     });
 
-    // Gather class definitions and usages
+    // Gather class definitions and usages, and testcases
     v2::traverse_streams(&token_tree_stream, |stream, delim| {
         match (stream, delim) {
             // TODO: stop representing class names as "fields".
-            (&[v2::TokenTree::Field { span, ident }], Some(v2::Delimiter::Bracket)) => {
+            (&[TT::Field { span, ident }], Some(v2::Delimiter::Bracket)) => {
                 // This is just a heuristic – not every [<word in brackets>] is necessarily
                 // a class name. But every usage of a class name should be of such form
                 let name = ident.cut_from(source).to_owned();
@@ -194,10 +190,22 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
 
         for window in stream.windows(2) {
             match window {
-                &[v2::TokenTree::ClassKeyword { .. }, v2::TokenTree::Field { span, ident }] => {
+                &[TT::ClassKeyword { .. }, TT::Field { span, ident }] => {
                     let name = ident.cut_from(source).to_owned();
                     definitions.push(Definition { span, item: Item::class(name) });
                 }
+
+                &[TT::Cmdlet { ident, .. }, TT::String { span, .. }]
+                if unicase::eq(ident.cut_from(source), "It") => {
+                    // TODO More precise analysis of string content
+                    // (consider escape characters, splicing, etc.)
+                    let test_name = FileStr::from(span).cut_from(source).trim_matches('"');
+                    testcases.push(Testcase {
+                        span: span,
+                        name: test_name.to_owned(),
+                    });
+                }
+
                 _ => {}
             }
         }
@@ -225,13 +233,6 @@ pub fn parse(source: &str, debug: bool) -> Result<File> {
                 span: get_span(importee_string),
                 importee,
             })
-        }
-
-        if let Some(captures) = TESTCASE.captures(line) {
-            testcases.push(Testcase {
-                span: get_span(&captures[1]),
-                name: captures[1].to_owned(),
-            });
         }
     }
 
