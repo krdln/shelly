@@ -80,7 +80,7 @@ pub fn ident_is_keyword(ident: &str) -> bool {
         | "catch"
         | "finally"
         | "if"
-        | "ifelse"
+        | "elseif"
         | "else"
         | "foreach"
         | "do"
