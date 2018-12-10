@@ -18,7 +18,7 @@ What it does not
 
 ## Installation
 
-Just download a binary (either for Linux or Windows) for (Releases page)[https://github.com/krdln/shelly/releases].
+Just download a binary (either for Linux or Windows) for [Releases page](https://github.com/krdln/shelly/releases).
 
 ## Building
 
