@@ -18,6 +18,10 @@ What it does not
 
 ## Installation
 
+Just download a binary (either for Linux or Windows) for (Releases page)[https://github.com/krdln/shelly/releases].
+
+## Building
+
 Install Rust following the instructions on <http://rust-lang.org>,
 (1.26 or later), restart your console, then run:
 
